@@ -584,6 +584,18 @@ uint32_t Audio::EnableAudioLEConfig(const int32_t handle, const bool enable) {
     return result;
 }
 
+uint32_t Audio::SetApplicationAudioConfig(const int32_t handle, const string& audioConfig, const bool enable) {
+    return (_platform != nullptr) ? _platform->SetApplicationAudioConfig(handle, audioConfig, enable) : WPEFramework::Core::ERROR_UNAVAILABLE;
+}
+
+uint32_t Audio::GetApplicationAudioConfig(const int32_t handle, const string& audioConfig, bool& enabled) {
+    return (_platform != nullptr) ? _platform->GetApplicationAudioConfig(handle, audioConfig, enabled) : WPEFramework::Core::ERROR_UNAVAILABLE;
+}
+
+uint32_t Audio::GetApplicationAudioConfigList(const int32_t handle, IDeviceSettingsAudioApplicationConfigIterator*& configList) const {
+    return (_platform != nullptr) ? _platform->GetApplicationAudioConfigList(handle, configList) : WPEFramework::Core::ERROR_UNAVAILABLE;
+}
+
 uint32_t Audio::SetAudioDelay(const int32_t handle, const uint32_t audioDelay) {
     uint32_t result = (_platform != nullptr) ? _platform->SetAudioDelay(handle, audioDelay) : WPEFramework::Core::ERROR_UNAVAILABLE;
     return result;

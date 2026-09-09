@@ -442,6 +442,18 @@ namespace Plugin {
         uint32_t result = _audio.EnableAudioLEConfig(handle, enable);
         return result;
     }
+
+    Core::hresult DeviceSettingsAudioImpl::SetApplicationAudioConfig(const int32_t handle, const string& audioConfig, const bool enable) {
+        return _audio.SetApplicationAudioConfig(handle, audioConfig, enable);
+    }
+
+    Core::hresult DeviceSettingsAudioImpl::GetApplicationAudioConfig(const int32_t handle, const string& audioConfig, bool& enabled) {
+        return _audio.GetApplicationAudioConfig(handle, audioConfig, enabled);
+    }
+
+    Core::hresult DeviceSettingsAudioImpl::GetApplicationAudioConfigList(const int32_t handle, IDeviceSettingsAudioApplicationConfigIterator*& configList) const {
+        return _audio.GetApplicationAudioConfigList(handle, configList);
+    }
     
     Core::hresult DeviceSettingsAudioImpl::SetAudioDelay(const int32_t handle, const uint32_t audioDelay) {
         uint32_t result = _audio.SetAudioDelay(handle, audioDelay);

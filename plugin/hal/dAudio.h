@@ -125,6 +125,11 @@ namespace dAudio {
         virtual uint32_t GetAudioLEConfig(const int32_t handle, bool &enabled) = 0;
         virtual uint32_t EnableAudioLEConfig(const int32_t handle, const bool enable) = 0;
 
+        // Application audio configuration
+        virtual uint32_t SetApplicationAudioConfig(const int32_t handle, const std::string& audioConfig, const bool enable) = 0;
+        virtual uint32_t GetApplicationAudioConfig(const int32_t handle, const std::string& audioConfig, bool& enabled) = 0;
+        virtual uint32_t GetApplicationAudioConfigList(const int32_t handle, IDeviceSettingsAudioApplicationConfigIterator*& configList) const = 0;
+
         // Audio delay
         virtual uint32_t SetAudioDelay(const int32_t handle, const uint32_t audioDelay) = 0;
         virtual uint32_t GetAudioDelay(const int32_t handle, uint32_t &audioDelay) = 0;

@@ -598,6 +598,18 @@ namespace Plugin {
     Core::hresult DeviceSettingsImp::EnableAudioLEConfig(const int32_t handle, const bool enable) {
         DELEGATE_TO_COMPONENT(_audioSettings, EnableAudioLEConfig, handle, enable)
     }
+
+    Core::hresult DeviceSettingsImp::SetApplicationAudioConfig(const int32_t handle, const string& audioConfig, const bool enable) {
+        DELEGATE_TO_COMPONENT(_audioSettings, SetApplicationAudioConfig, handle, audioConfig, enable)
+    }
+
+    Core::hresult DeviceSettingsImp::GetApplicationAudioConfig(const int32_t handle, const string& audioConfig, bool& enabled) {
+        DELEGATE_TO_COMPONENT(_audioSettings, GetApplicationAudioConfig, handle, audioConfig, enabled)
+    }
+
+    Core::hresult DeviceSettingsImp::GetApplicationAudioConfigList(const int32_t handle, IDeviceSettingsAudioApplicationConfigIterator*& configList) const {
+        DELEGATE_TO_COMPONENT(_audioSettings, GetApplicationAudioConfigList, handle, configList)
+    }
     
     Core::hresult DeviceSettingsImp::SetAudioDelay(const int32_t handle, const uint32_t audioDelay) {
         DELEGATE_TO_COMPONENT(_audioSettings, SetAudioDelay, handle, audioDelay)
