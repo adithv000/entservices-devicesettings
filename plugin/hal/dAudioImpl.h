@@ -43,6 +43,23 @@
 #include <condition_variable>
 #include <chrono>
 
+// Fallback for DS HAL header sets predating the application audio config ABI; layout is frozen upstream.
+#ifndef DS_MAX_APPLICATION_AUDIO_CONFIG_NAME_LEN
+#define DS_MAX_APPLICATION_AUDIO_CONFIG_NAME_LEN 64
+#define DS_MAX_APPLICATION_AUDIO_CONFIGS 64
+
+typedef struct _dsApplicationAudioConfig_t {
+    char configName[DS_MAX_APPLICATION_AUDIO_CONFIG_NAME_LEN];
+} dsApplicationAudioConfig_t;
+
+typedef struct _dsApplicationAudioConfigList_t {
+    uint32_t size;
+    uint32_t totalCount;
+    uint32_t returnedCount;
+    dsApplicationAudioConfig_t config[DS_MAX_APPLICATION_AUDIO_CONFIGS];
+} dsApplicationAudioConfigList_t;
+#endif
+
 // Static global callback functions following HdmiIn pattern
 static std::function<void(const AudioPortType, const uint32_t, const bool)> g_AudioOutHotPlugCallback;
 static std::function<void(const AudioFormat)> g_AudioFormatUpdateCallback;
@@ -2609,12 +2626,14 @@ public:
                 return WPEFramework::Core::ERROR_GENERAL;
             }
 
-            std::vector<string> configurations;
+            std::vector<ApplicationAudioConfig> configurations;
             const size_t capacity = sizeof(halConfigList.config) / sizeof(halConfigList.config[0]);
             const size_t count = (halConfigList.returnedCount < capacity) ? halConfigList.returnedCount : capacity;
             configurations.reserve(count);
             for (size_t index = 0; index < count; ++index) {
-                configurations.emplace_back(halConfigList.config[index].configName);
+                ApplicationAudioConfig config;
+                config.configName = halConfigList.config[index].configName;
+                configurations.emplace_back(config);
             }
 
             using ApplicationConfigIterator = WPEFramework::RPC::IteratorType<IDeviceSettingsAudioApplicationConfigIterator>;
