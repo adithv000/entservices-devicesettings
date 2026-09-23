@@ -28,6 +28,22 @@
 #include "secure_wrapper.h" 
 #include "CompositeIn.h"
 #include "hal/dCompositeInImpl.h"
+#ifdef ENABLE_COMPOSITEINPUT_AIDL
+#include "hal/dCompositeInAIDLImpl.h"
+#endif
+
+CompositeIn CompositeIn::Create(INotification& parent)
+{
+    ENTRY_LOG;
+#ifdef ENABLE_COMPOSITEINPUT_AIDL
+    if (dCompositeInAIDLImpl::IsAvailable()) {
+        DSLOG_INFO("Using CompositeInput AIDL HAL");
+        return CompositeIn(parent, std::make_shared<dCompositeInAIDLImpl>());
+    }
+#endif
+    DSLOG_INFO("Using legacy CompositeInput DS HAL");
+    return CompositeIn(parent, std::make_shared<dCompositeInImpl>());
+}
 
 CompositeIn::CompositeIn(INotification& parent, std::shared_ptr<IPlatform> platform)
     : _platform(std::move(platform))

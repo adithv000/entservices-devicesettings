@@ -45,7 +45,6 @@
 
 class CompositeIn {
     using IPlatform = hal::dCompositeIn::IPlatform;
-    using DefaultImpl = dCompositeInImpl;
 
     std::shared_ptr<IPlatform> _platform;
 
@@ -62,7 +61,7 @@ public:
 public:
     void Platform_init();
     /** Deferred HAL init — called from DeviceSettingsImp::Configure() */
-    void InitialiseHAL() { std::static_pointer_cast<DefaultImpl>(_platform)->InitialiseHAL(); }
+    void InitialiseHAL() { platform().InitialiseHAL(); }
 
     // CompositeIn HAL interface methods
     uint32_t GetNrOfCompositeInputs(int32_t &nrCompositeInputs);
@@ -81,7 +80,9 @@ private:
     INotification& _parent;
 
 public:
-    template <typename IMPL = DefaultImpl, typename... Args>
+    static CompositeIn Create(INotification& parent);
+
+    template <typename IMPL, typename... Args>
     static CompositeIn Create(INotification& parent, Args&&... args)
     {
         ENTRY_LOG;

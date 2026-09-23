@@ -31,7 +31,7 @@ namespace Plugin {
         _CompositeInNotifications(),
         _apiLock(),
         _callbackLock(),
-        _compositeIn(CompositeIn::Create<dCompositeInImpl>(*this))
+        _compositeIn(CompositeIn::Create(*this))
     {
         DSLOG_INFO("Constructor - Instance Address: %p", this);
     }

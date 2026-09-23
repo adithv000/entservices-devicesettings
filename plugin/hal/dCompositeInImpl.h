@@ -93,7 +93,7 @@ public:
         return instance;
     }
 
-    void InitialiseHAL()
+    void InitialiseHAL() override
     {
         
         // Check TV profile - following dHdmiInImpl.h pattern
@@ -138,7 +138,7 @@ public:
         }
     }
 
-    void DeInitialiseHAL()
+    void DeInitialiseHAL() override
     {
         
         if (TV != profileType) {

@@ -110,6 +110,78 @@ set_target_properties(${PLUGIN_IMPLEMENTATION} PROPERTIES
     CXX_STANDARD 17
         CXX_STANDARD_REQUIRED YES)
 
+# CompositeInput AIDL is optional. Runtime selection still falls back to DS HAL
+# when the generated interfaces are built in but the service is not published.
+find_path(COMPOSITEINPUT_AIDL_INCLUDE_DIR
+    NAMES com/rdk/hal/compositeinput/ICompositeInputManager.h
+    PATHS ${CMAKE_SYSROOT}/usr/include
+    PATH_SUFFIXES
+        mw/compositeinput/0.2.0.0/include
+        vendor/compositeinput/0.2.0.0/include)
+find_path(PLANECONTROL_AIDL_INCLUDE_DIR
+    NAMES com/rdk/hal/planecontrol/IPlaneControl.h
+    PATHS ${CMAKE_SYSROOT}/usr/include
+    PATH_SUFFIXES
+        mw/planecontrol/0.2.0.0/include
+        vendor/planecontrol/0.2.0.0/include)
+find_path(COMMON_AIDL_INCLUDE_DIR
+    NAMES com/rdk/hal/PropertyValue.h
+    PATHS ${CMAKE_SYSROOT}/usr/include
+    PATH_SUFFIXES
+        mw/common/0.2.0.0/include
+        vendor/common/0.2.0.0/include)
+find_path(ANDROID_BINDER_INCLUDE_DIR
+    NAMES binder/IServiceManager.h
+    PATHS ${CMAKE_SYSROOT}/usr/include
+    PATH_SUFFIXES mw/include)
+
+find_library(COMPOSITEINPUT_AIDL_LIBRARY
+    NAMES compositeinput-v0.2.0.0-cpp
+    PATHS ${CMAKE_SYSROOT}/usr/lib
+    PATH_SUFFIXES mw/rdk-halif-aidl vendor/rdk-halif-aidl)
+find_library(PLANECONTROL_AIDL_LIBRARY
+    NAMES planecontrol-v0.2.0.0-cpp
+    PATHS ${CMAKE_SYSROOT}/usr/lib
+    PATH_SUFFIXES mw/rdk-halif-aidl vendor/rdk-halif-aidl)
+find_library(COMMON_AIDL_LIBRARY
+    NAMES common-v0.2.0.0-cpp
+    PATHS ${CMAKE_SYSROOT}/usr/lib
+    PATH_SUFFIXES mw/rdk-halif-aidl vendor/rdk-halif-aidl)
+find_library(ANDROID_BINDER_LIBRARY
+    NAMES binder
+    PATHS ${CMAKE_SYSROOT}/usr/mw/lib/binder)
+find_library(ANDROID_UTILS_LIBRARY
+    NAMES utils
+    PATHS ${CMAKE_SYSROOT}/usr/mw/lib/binder)
+
+if(COMPOSITEINPUT_AIDL_INCLUDE_DIR
+        AND PLANECONTROL_AIDL_INCLUDE_DIR
+        AND COMMON_AIDL_INCLUDE_DIR
+        AND ANDROID_BINDER_INCLUDE_DIR
+        AND COMPOSITEINPUT_AIDL_LIBRARY
+        AND PLANECONTROL_AIDL_LIBRARY
+        AND COMMON_AIDL_LIBRARY
+        AND ANDROID_BINDER_LIBRARY
+        AND ANDROID_UTILS_LIBRARY)
+    message(STATUS "Enabling CompositeInput AIDL HAL support")
+    target_sources(${PLUGIN_IMPLEMENTATION} PRIVATE hal/dCompositeInAIDLImpl.cpp)
+    target_compile_definitions(${PLUGIN_IMPLEMENTATION} PRIVATE ENABLE_COMPOSITEINPUT_AIDL)
+    target_include_directories(${PLUGIN_IMPLEMENTATION} PRIVATE
+        ${COMPOSITEINPUT_AIDL_INCLUDE_DIR}
+        ${PLANECONTROL_AIDL_INCLUDE_DIR}
+        ${COMMON_AIDL_INCLUDE_DIR}
+        ${ANDROID_BINDER_INCLUDE_DIR})
+    target_link_libraries(${PLUGIN_IMPLEMENTATION} PRIVATE
+        ${COMPOSITEINPUT_AIDL_LIBRARY}
+        ${PLANECONTROL_AIDL_LIBRARY}
+        ${COMMON_AIDL_LIBRARY}
+        ${ANDROID_BINDER_LIBRARY}
+        ${ANDROID_UTILS_LIBRARY})
+    set_target_properties(${PLUGIN_IMPLEMENTATION} PROPERTIES CXX_STANDARD 17)
+else()
+    message(STATUS "CompositeInput AIDL HAL artifacts not found; using DS HAL only")
+endif()
+
 #if(RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
 #
 #    target_compile_definitions(${PLUGIN_IMPLEMENTATION}
