@@ -182,6 +182,45 @@ else()
     message(STATUS "CompositeInput AIDL HAL artifacts not found; using DS HAL only")
 endif()
 
+# HDMI Output AIDL is optional. Runtime selection still falls back to the legacy DS HAL
+# (dVideoPortImpl/dVideoDeviceImpl) when the generated interfaces are built in but the
+# service is not published.
+find_path(HDMIOUTPUT_AIDL_INCLUDE_DIR
+    NAMES com/rdk/hal/hdmioutput/IHDMIOutputManager.h
+    PATHS ${CMAKE_SYSROOT}/usr/include
+    PATH_SUFFIXES
+        mw/hdmioutput/0.1.0.0/include
+        vendor/hdmioutput/0.1.0.0/include)
+
+find_library(HDMIOUTPUT_AIDL_LIBRARY
+    NAMES hdmioutput-v0.1.0.0-cpp
+    PATHS ${CMAKE_SYSROOT}/usr/lib
+    PATH_SUFFIXES mw/rdk-halif-aidl vendor/rdk-halif-aidl)
+
+if(HDMIOUTPUT_AIDL_INCLUDE_DIR
+        AND COMMON_AIDL_INCLUDE_DIR
+        AND ANDROID_BINDER_INCLUDE_DIR
+        AND HDMIOUTPUT_AIDL_LIBRARY
+        AND COMMON_AIDL_LIBRARY
+        AND ANDROID_BINDER_LIBRARY
+        AND ANDROID_UTILS_LIBRARY)
+    message(STATUS "Enabling HDMI Output AIDL HAL support")
+    target_sources(${PLUGIN_IMPLEMENTATION} PRIVATE hal/dVideoPortAIDLImpl.cpp hal/dVideoDeviceAIDLImpl.cpp)
+    target_compile_definitions(${PLUGIN_IMPLEMENTATION} PRIVATE ENABLE_HDMIOUTPUT_AIDL)
+    target_include_directories(${PLUGIN_IMPLEMENTATION} PRIVATE
+        ${HDMIOUTPUT_AIDL_INCLUDE_DIR}
+        ${COMMON_AIDL_INCLUDE_DIR}
+        ${ANDROID_BINDER_INCLUDE_DIR})
+    target_link_libraries(${PLUGIN_IMPLEMENTATION} PRIVATE
+        ${HDMIOUTPUT_AIDL_LIBRARY}
+        ${COMMON_AIDL_LIBRARY}
+        ${ANDROID_BINDER_LIBRARY}
+        ${ANDROID_UTILS_LIBRARY})
+    set_target_properties(${PLUGIN_IMPLEMENTATION} PROPERTIES CXX_STANDARD 17)
+else()
+    message(STATUS "HDMI Output AIDL HAL artifacts not found; VideoPort/VideoDevice will use DS HAL only")
+endif()
+
 #if(RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
 #
 #    target_compile_definitions(${PLUGIN_IMPLEMENTATION}

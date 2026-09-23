@@ -38,8 +38,8 @@ namespace dVideoDevice {
 
     public:
         virtual ~IPlatform() {} 
-        void InitialiseHAL();
-        void DeInitialiseHAL();
+        virtual void InitialiseHAL() = 0;
+        virtual void DeInitialiseHAL() = 0;
         virtual void setAllCallbacks(const CallbackBundle& bundle) = 0;
         virtual void getPersistenceValue() = 0;
 

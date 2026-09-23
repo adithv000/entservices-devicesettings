@@ -28,6 +28,22 @@
 #include "secure_wrapper.h"
 #include "VideoDevice.h"
 #include "hal/dVideoDeviceImpl.h"
+#ifdef ENABLE_HDMIOUTPUT_AIDL
+#include "hal/dVideoDeviceAIDLImpl.h"
+#endif
+
+VideoDevice VideoDevice::Create(INotification& parent)
+{
+    ENTRY_LOG;
+#ifdef ENABLE_HDMIOUTPUT_AIDL
+    if (dVideoDeviceAIDLImpl::IsAvailable()) {
+        DSLOG_INFO("Using HDMI Output AIDL HAL");
+        return VideoDevice(parent, std::make_shared<dVideoDeviceAIDLImpl>());
+    }
+#endif
+    DSLOG_INFO("Using legacy VideoDevice DS HAL");
+    return VideoDevice(parent, std::make_shared<DefaultImpl>());
+}
 
 VideoDevice::VideoDevice(INotification& parent, std::shared_ptr<IPlatform> platform)
     : _platform(std::move(platform))
