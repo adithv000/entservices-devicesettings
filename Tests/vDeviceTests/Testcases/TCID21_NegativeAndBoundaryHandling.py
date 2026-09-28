@@ -48,6 +48,7 @@ def run_test():
         ("getRawSPD (portId='foo')", AVInputApis.get_raw_spd_invalid_port),
         ("getSPD (portId='foo')", AVInputApis.get_spd_invalid_port),
         ("getInputDevices (typeOfInput='ABCD')", AVInputApis.get_input_devices_invalid_type),
+        ("getHdmiVersion (portId='foo')", AVInputApis.get_hdmi_version_invalid_port),
         ("getEdid2AllmSupport (portId=99, out of range)", AVInputApis.get_edid2_allm_support(99)),
         ("setEdid2AllmSupport (portId=99, out of range)", AVInputApis.set_edid2_allm_support(99, True)),
         ("getGameFeatureStatus (portId=99, out of range)", AVInputApis.get_game_feature_status(99)),
@@ -55,6 +56,11 @@ def run_test():
         ("getVRRSupport (portId=99, out of range)", AVInputApis.get_vrr_support(99)),
         ("getVRRFrameRate (portId=99, out of range)", AVInputApis.get_vrr_frame_rate(99)),
         ("startInput (portId=99, out of range)", AVInputApis.start_input_out_of_range()),
+        # ("startInput (typeOfInput='INVALID_TYPE')", AVInputApis.start_input_invalid_type()),
+        ("stopInput (typeOfInput='INVALID_TYPE')", AVInputApis.stop_input_invalid_type()),
+        ("setVideoRectangle (negative bounds)", AVInputApis.set_video_rectangle_invalid_bounds()),
+        ("setVRRSupport (portId=-1)", AVInputApis.set_vrr_support_invalid()),
+        ("setMixerLevels (primaryVolume=-1, inputVolume=101)", AVInputApis.set_mixer_levels_invalid()),
         ("setEdidVersion (edidVersion='HDMI9.9')", AVInputApis.set_edid_version_invalid()),
     ]
 

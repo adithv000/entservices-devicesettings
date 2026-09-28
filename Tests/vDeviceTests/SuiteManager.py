@@ -40,6 +40,7 @@ import os
 
 from utils import (
     activate_plugin,
+    deactivate_plugin,
     log_error,
     log_info,
     log_success,
@@ -85,6 +86,8 @@ SUITES = {
             "TCID27_SpdInfoFrameReadback",
             "TCID28_StableSignalState",
             "TCID29_NoSigToStableSignalTransition",
+            "TCID30_InvalidPortStartStopInput",
+            "TCID31_AviInfoFrameNotification",
         ],
     },
 }
@@ -184,40 +187,46 @@ def run_suite_init(suite_name):
     return ok
 
 
+def activate_test_plugins(suite_name):
+    callsigns = list(SUITE_PREREQUISITE_CALLSIGNS.get(suite_name, []))
+    plugin_callsign = SUITE_PLUGIN_CALLSIGNS.get(suite_name)
+    if plugin_callsign:
+        callsigns.append(plugin_callsign)
+
+    activated = []
+    for callsign in callsigns:
+        log_info(
+            f"Auto-activating plugin '{callsign}' "
+            f"via curl JSON-RPC at {WPEFRAMEWORK_JSONRPC_URL}"
+        )
+        if not activate_plugin(callsign):
+            log_error(f"Plugin activation failed: {callsign}")
+            return False, activated
+        activated.append(callsign)
+        log_success(f"Plugin activated: {callsign}")
+        log_info("Waiting 6s for plugin to fully initialise...")
+        time.sleep(6)
+
+    return True, activated
+
+
+def deactivate_test_plugins(callsigns):
+    success = True
+    for callsign in reversed(callsigns):
+        log_info(f"Auto-deactivating plugin '{callsign}'")
+        if deactivate_plugin(callsign):
+            log_success(f"Plugin deactivated: {callsign}")
+        else:
+            log_error(f"Plugin deactivation failed: {callsign}")
+            success = False
+    return success
+
+
 def run_suite(suite_name, selected_tests=None):
     banner, test_cases = load_test_cases(suite_name, selected_tests)
     print(banner)
 
     auto_activate = os.environ.get("AUTO_ACTIVATE_PLUGINS", "1").lower() not in ("0", "false", "no")
-    prerequisites = SUITE_PREREQUISITE_CALLSIGNS.get(suite_name, [])
-    callsign = SUITE_PLUGIN_CALLSIGNS.get(suite_name)
-    if auto_activate and callsign:
-        for prerequisite_callsign in prerequisites:
-            log_info(
-                f"Auto-activating prerequisite plugin '{prerequisite_callsign}' "
-                f"via curl JSON-RPC at {WPEFRAMEWORK_JSONRPC_URL}"
-            )
-            if not activate_plugin(prerequisite_callsign):
-                log_error(f"Plugin activation failed: {prerequisite_callsign}")
-                log_error("Check JSON-RPC endpoint reachability and plugin availability before running tests.")
-                return False
-            log_success(f"Plugin activated: {prerequisite_callsign}")
-            log_info("Waiting 6s for plugin to fully initialise...")
-            time.sleep(6)
-
-        log_info(f"Auto-activating plugin '{callsign}' via curl JSON-RPC at {WPEFRAMEWORK_JSONRPC_URL}")
-        if activate_plugin(callsign):
-            log_success(f"Plugin activated: {callsign}")
-            log_info("Waiting 6s for plugin to fully initialise...")
-            time.sleep(6)
-        else:
-            log_error(f"Plugin activation failed: {callsign}")
-            log_error("Check JSON-RPC endpoint reachability and plugin availability before running tests.")
-            return False
-
-    if not run_suite_init(suite_name):
-        log_error("Aborting suite because initialization did not complete successfully.")
-        return False
 
     passed = 0
     failed = 0
@@ -230,12 +239,26 @@ def run_suite(suite_name, selected_tests=None):
         log_info(f"{'='*60}")
         captured = io.StringIO()
         sys.stdout = captured
+        activated_callsigns = []
         try:
-            result = tc_fn()
+            plugins_ready = True
+            if auto_activate:
+                plugins_ready, activated_callsigns = activate_test_plugins(suite_name)
+
+            if not plugins_ready:
+                log_error("Testcase setup failed because plugin activation did not complete.")
+                result = False
+            elif not run_suite_init(suite_name):
+                log_error("Testcase setup failed because initialization did not complete.")
+                result = False
+            else:
+                result = tc_fn()
         except Exception as exc:
             result = False
             print(f"EXCEPTION in {tc_name}: {exc}")
         finally:
+            if auto_activate and not deactivate_test_plugins(activated_callsigns):
+                result = False
             sys.stdout = original_stdout
 
         output = captured.getvalue()

@@ -229,6 +229,7 @@ get_spd_invalid_port = _curl("getSPD", params={"portId": "foo"})
 get_input_devices_invalid_type = _curl(
     "getInputDevices", params={"typeOfInput": "ABCD"}
 )
+get_hdmi_version_invalid_port = _curl("getHdmiVersion", params={"portId": "foo"})
 
 
 def get_edid_version_out_of_range(port_id=99):
@@ -248,8 +249,46 @@ def start_input_out_of_range(port_id=99):
     )
 
 
+def start_input_invalid_type(port_id=0, type_of_input="INVALID_TYPE"):
+    return _curl(
+        "startInput",
+        params={
+            "portId": int(port_id),
+            "typeOfInput": type_of_input,
+            "requestAudioMix": False,
+            "plane": 0,
+            "topMost": False,
+        },
+    )
+
+
+def stop_input_invalid_type(type_of_input="INVALID_TYPE"):
+    return _curl("stopInput", params={"typeOfInput": type_of_input})
+
+
 def set_edid_version_invalid(port_id=0, edid_version="HDMI9.9"):
     return _curl(
         "setEdidVersion",
         params={"portId": int(port_id), "edidVersion": edid_version},
+    )
+
+
+def set_vrr_support_invalid(port_id=-1, vrr_support=True):
+    return _curl(
+        "setVRRSupport",
+        params={"portId": int(port_id), "vrrSupport": bool(vrr_support)},
+    )
+
+
+def set_video_rectangle_invalid_bounds():
+    return _curl(
+        "setVideoRectangle",
+        params={"x": -1, "y": -1, "w": -10, "h": 0, "typeOfInput": TYPE_HDMI},
+    )
+
+
+def set_mixer_levels_invalid():
+    return _curl(
+        "setMixerLevels",
+        params={"primaryVolume": -1, "inputVolume": 101},
     )

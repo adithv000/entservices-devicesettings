@@ -51,6 +51,9 @@ def run_test():
         ("getRawSPD (portId=foo)", AVInputApis.get_raw_spd_invalid_port),
         ("getSPD (portId=foo)", AVInputApis.get_spd_invalid_port),
         ("getInputDevices (typeOfInput=ABCD)", AVInputApis.get_input_devices_invalid_type),
+        ("getHdmiVersion (portId=foo)", AVInputApis.get_hdmi_version_invalid_port),
+        ("startInput (typeOfInput=INVALID_TYPE)", AVInputApis.start_input_invalid_type()),
+        ("setVideoRectangle (negative bounds)", AVInputApis.set_video_rectangle_invalid_bounds()),
     ]
 
     for label, cmd in malformed_calls:

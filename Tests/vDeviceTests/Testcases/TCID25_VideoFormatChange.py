@@ -4,11 +4,10 @@
  * @brief L3 AVInput vComponent-driven testcase.
  *
  * @testcase TCID25_VideoFormatChange
- * @details Presents an HDMI source, reads the current video mode, injects a
- *          video-format change through the vComponent
- *          (HDMIInput_VideoFormat_Change.yaml -> VIC16_1920_1080_P_60_16_9 ->
- *          onVIChanged in the HAL) and re-reads/prints the new video mode via
- *          the JSON-RPC currentVideoMode getter.
+ * @details Presents an HDMI source, reads the current video mode, then injects
+ *          VIC16_1920_1080_P_60_16_9, VIC34_1920_1080_P_30_16_9, and
+ *          VIC93_3840_2160_P_24_16_9 through the vComponent. After each
+ *          injection, it verifies the JSON-RPC currentVideoMode getter changes.
  *
  * @note HAL gating (dHdmiInAIDLImpl): GetHDMIVideoMode returns the injected VIC
  *       ONLY for the ACTIVE port (m_aidlActivePort), and the port only becomes
@@ -29,18 +28,19 @@
  *  - utils.py, AVInput_Curl.py, AVInput_Helpers.py, SuiteManager.py
  *  - vcomponent_configurations/commands/HDMIInput_Connection_Status.yaml
  *  - vcomponent_configurations/commands/HDMIInput_Signal_Status.yaml
- *  - vcomponent_configurations/commands/HDMIInput_VideoFormat_Change.yaml
+ *  - HDMI Input vComponent videoformat_change command
  *
  * @expected_result
- *  - After presenting the source, currentVideoMode reflects the injected
- *    1920x1080/60 format (non-empty on a presenting port).
+ *  - After presenting the source, currentVideoMode changes for each injected
+ *    1080p60, 1080p30, and 2160p24 format.
  *
  * @pass_criteria
- *  - The YAML post is accepted and currentVideoMode returns a valid string;
- *    run_test() returns True.
+ *  - Every format post is accepted and currentVideoMode changes after each
+ *    injection; run_test() returns True.
  *
  * @failure_criteria
- *  - The YAML post is rejected, or currentVideoMode is not a string.
+ *  - A format post is rejected, currentVideoMode is not a string, or the mode
+ *    does not change after an injection.
  */
 """
 
@@ -49,6 +49,7 @@ import os
 
 from utils import (
     HDMIIN_CMD_BASE,
+    JsonRpcEventListener,
     send_curl_command,
     send_vcomponent_command,
     send_vcomponent_payload,
@@ -64,7 +65,17 @@ from AVInput_Helpers import result_success, parse_current_video_mode
 PORT = 0
 CONNECTION_YAML = "HDMIInput_Connection_Status.yaml"
 SIGNAL_YAML = "HDMIInput_Signal_LOCKED_Status.yaml"
-VIDEO_FORMAT_YAML = "HDMIInput_VideoFormat_Change.yaml"
+EVENT_TIMEOUT = float(os.environ.get("AVINPUT_EVENT_TIMEOUT", "8"))
+VIDEO_FORMATS = (
+    "VIC16_1920_1080_P_60_16_9",
+    "VIC34_1920_1080_P_30_16_9",
+    "VIC93_3840_2160_P_24_16_9",
+)
+VIDEO_STREAM_INFO = {
+    "VIC16_1920_1080_P_60_16_9": (1920, 1080, 60000, 1000),
+    "VIC34_1920_1080_P_30_16_9": (1920, 1080, 30000, 1000),
+    "VIC93_3840_2160_P_24_16_9": (3840, 2160, 24000, 1000),
+}
 
 
 def _post_file(name):
@@ -79,8 +90,40 @@ def _read_video_mode():
     return parse_current_video_mode(response)
 
 
+def _expect_video_format(listener, video_format):
+    width, height, frame_rate_n, frame_rate_d = VIDEO_STREAM_INFO[video_format]
+    notification = listener.wait_for_event(
+        lambda params: (
+            str(params.get("id")) == str(PORT)
+            and params.get("width") == width
+            and params.get("height") == height
+            and params.get("progressive") is True
+            and params.get("frameRateN") == frame_rate_n
+            and params.get("frameRateD") == frame_rate_d
+        ),
+        timeout=EVENT_TIMEOUT,
+    )
+    if notification is None:
+        log_error(
+            "videoStreamInfoUpdate not received for port=0, "
+            f"{width}x{height} progressive at {frame_rate_n / frame_rate_d:g} Hz"
+        )
+        return False
+    log_success(f"Captured videoStreamInfoUpdate: {notification}")
+    return True
+
+
 def run_test():
     start_time = time.perf_counter()
+    listener = JsonRpcEventListener(
+        AVInputApis.CALLSIGN,
+        "videoStreamInfoUpdate",
+        "ID_TCID25_video_format",
+        timeout=EVENT_TIMEOUT,
+    )
+    if not listener.connect():
+        log_error("TCID25_VideoFormatChange Failed (event registration rejected)")
+        return False
 
     try:
         log_info("Step 1: startInput on port 0")
@@ -110,36 +153,58 @@ def run_test():
             return False
         log_info(f"Current resolution BEFORE injection = '{before_mode or '<no source>'}'")
 
-        # Step 4: inject the video-format change (VIC16 -> 1920x1080p60).
-        log_info(f"Step 4: injecting videoformat_change via {VIDEO_FORMAT_YAML}")
-        if not _post_file(VIDEO_FORMAT_YAML):
-            log_error("TCID25_VideoFormatChange Failed ❌ (videoformat_change YAML rejected)")
-            return False
-        time.sleep(2)
-
-        # Step 5: re-read and print the NEW resolution.
-        after_mode = _read_video_mode()
-        if after_mode is None:
-            log_error("TCID25_VideoFormatChange Failed ❌ (currentVideoMode not a string after injection)")
-            return False
-        log_info(f"Current resolution AFTER injection = '{after_mode or '<no source>'}'")
-
-        if after_mode:
-            if after_mode != before_mode:
-                log_success(f"✅ Video mode updated after injection: '{before_mode}' -> '{after_mode}'")
-            else:
-                log_success(f"✅ Video mode reported as '{after_mode}' after injection")
-        else:
-            log_warning(
-                "currentVideoMode is empty after injection: the vDevice never presented the "
-                "port (m_aidlActivePort stayed -1 because the AIDL SelectHDMIInPort path is "
-                "stubbed), so GetHDMIVideoMode reads VIC=0. Accepting injection acceptance + "
-                "queryability."
+        previous_mode = before_mode
+        for step, video_format in enumerate(VIDEO_FORMATS, start=4):
+            log_info(f"Step {step}: injecting videoformat_change format={video_format}")
+            http_code, body = send_vcomponent_payload(
+                "videoformat_change",
+                {"port": PORT, "format": video_format},
             )
+            log_warning(f"vComponent POST {video_format}: HTTP {http_code} {body}")
+            if http_code != 200:
+                log_error(
+                    f"TCID25_VideoFormatChange Failed ❌ ({video_format} injection rejected)"
+                )
+                return False
+            if not _expect_video_format(listener, video_format):
+                log_error(
+                    "TCID25_VideoFormatChange Failed ❌ "
+                    f"(videoStreamInfoUpdate not captured for {video_format})"
+                )
+                return False
+            time.sleep(2)
+
+            current_mode = _read_video_mode()
+            if current_mode is None:
+                log_error(
+                    "TCID25_VideoFormatChange Failed ❌ "
+                    f"(currentVideoMode not a string after {video_format})"
+                )
+                return False
+            log_info(f"Current resolution after {video_format} = '{current_mode or '<no source>'}'")
+
+            if not current_mode:
+                log_error(
+                    "TCID25_VideoFormatChange Failed ❌ "
+                    f"(currentVideoMode empty after {video_format})"
+                )
+                return False
+            if current_mode == previous_mode:
+                log_error(
+                    "TCID25_VideoFormatChange Failed ❌ "
+                    f"(currentVideoMode did not change after {video_format}: '{current_mode}')"
+                )
+                return False
+
+            log_success(
+                f"✅ Video mode changed for {video_format}: '{previous_mode}' -> '{current_mode}'"
+            )
+            previous_mode = current_mode
     finally:
         send_vcomponent_payload("signal_status", {"port": PORT, "state": "NO_SIGNAL"})
         send_vcomponent_payload("connection_status", {"port": PORT, "connected": False})
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
+        listener.close()
 
     elapsed_time = time.perf_counter() - start_time
     msg = "TCID25_VideoFormatChange Passed ✅"

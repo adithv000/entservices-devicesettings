@@ -6,32 +6,28 @@
  * @testcase TCID29_NoSigToStableSignalTransition
  * @details Registers for onSignalChanged, presents HDMI port 0, and injects a
  *          sequence of distinct signal states through the HDMI Input
- *          vComponent. Each stimulus is logged beside the AVInput status
- *          expected in middleware logs so callback processing can be traced.
+ *          vComponent. Each resulting notification payload is captured and
+ *          validated directly over a persistent JSON-RPC WebSocket.
  *
  * @precondition
  *  - org.rdk.AVInput is active and reachable through JSON-RPC.
  *  - HDMI Input vComponent is reachable at HDMIIN_VCOMPONENT_API_URL.
  *
  * @expected_result
- *  - Service logs show onSignalChanged transitions for stableSignal,
- *    unstableSignal, notSupportedSignal, and noSignal in injection order.
+ *  - onSignalChanged delivers noSignal, unstableSignal, and stableSignal in
+ *    injection order.
  *
  * @pass_criteria
- *  - Event registration, startInput, and every vComponent post are accepted.
- *
- * @note
- *  - The JSON-RPC registration transport does not retain asynchronous event
- *    payloads, so notification payloads are verified in the target logs.
+ *  - Every stimulus is accepted and its matching notification is captured.
  */
 """
 
 import os
-import time
 
 import AVInput_Curl as AVInputApis
 from utils import (
     HDMIIN_CMD_BASE,
+    JsonRpcEventListener,
     is_ok,
     log_error,
     log_info,
@@ -45,7 +41,7 @@ from utils import (
 PORT = 0
 STABLE_SIGNAL_YAML = "HDMIInput_Signal_LOCKED_Status.yaml"
 UNSTABLE_SIGNAL_YAML = "HDMIInput_Signal_UNSTABLE_Status.yaml"
-TRANSITION_DELAY = float(os.environ.get("AVINPUT_SIGNAL_TRANSITION_DELAY", "2"))
+EVENT_TIMEOUT = float(os.environ.get("AVINPUT_EVENT_TIMEOUT", "8"))
 
 
 def _post_signal(state):
@@ -66,12 +62,32 @@ def _post_yaml(yaml_file):
     return http_code == 200
 
 
-def run_test():
-    registration = send_curl_command(
-        AVInputApis.register_event("onSignalChanged", "ID_TCID29_signal")
+def _expect_signal(listener, expected_status):
+    notification = listener.wait_for_event(
+        lambda params: (
+            str(params.get("id")) == str(PORT)
+            and params.get("signalStatus") == expected_status
+        ),
+        timeout=EVENT_TIMEOUT,
     )
-    log_warning(f"register onSignalChanged: {registration}")
-    if not is_ok(registration):
+    if notification is None:
+        log_error(
+            f"onSignalChanged not received for port={PORT}, "
+            f"signalStatus='{expected_status}'"
+        )
+        return False
+    log_success(f"Captured onSignalChanged: {notification}")
+    return True
+
+
+def run_test():
+    listener = JsonRpcEventListener(
+        AVInputApis.CALLSIGN,
+        "onSignalChanged",
+        "ID_TCID29_signal",
+        timeout=EVENT_TIMEOUT,
+    )
+    if not listener.connect():
         log_error("TCID29_NoSigToStableSignalTransition Failed (event registration rejected)")
         return False
 
@@ -80,7 +96,8 @@ def run_test():
         if not _post_signal("NO_SIGNAL"):
             log_error("TCID29_NoSigToStableSignalTransition Failed (baseline rejected)")
             return False
-        time.sleep(TRANSITION_DELAY)
+        if not _expect_signal(listener, AVInputApis.SIGNAL_NO):
+            return False
 
         start_response = send_curl_command(AVInputApis.start_input(PORT))
         log_warning(f"startInput response: {start_response}")
@@ -96,8 +113,6 @@ def run_test():
             log_error("TCID29_NoSigToStableSignalTransition Failed (connection rejected)")
             return False
 
-        time.sleep(TRANSITION_DELAY)
-
         transitions = (
             (UNSTABLE_SIGNAL_YAML, AVInputApis.SIGNAL_UNSTABLE),
             (STABLE_SIGNAL_YAML, AVInputApis.SIGNAL_STABLE),
@@ -105,7 +120,7 @@ def run_test():
         for index, (yaml_file, expected_status) in enumerate(transitions, start=1):
             log_info(
                 f"Signal transition {index}: inject {yaml_file}; "
-                f"expect onSignalChanged status='{expected_status}' in target logs"
+                f"expect onSignalChanged status='{expected_status}'"
             )
             accepted = _post_yaml(yaml_file)
             if not accepted:
@@ -113,12 +128,10 @@ def run_test():
                     f"TCID29_NoSigToStableSignalTransition Failed ({yaml_file} injection rejected)"
                 )
                 return False
-            time.sleep(TRANSITION_DELAY)
+            if not _expect_signal(listener, expected_status):
+                return False
 
-        log_success(
-            "Signal transition sequence accepted; correlate the markers above "
-            "with onSignalChanged entries in the target logs"
-        )
+        log_success("No-signal to stable-signal notifications captured in order")
         return True
     finally:
         _post_signal("NO_SIGNAL")
@@ -126,3 +139,4 @@ def run_test():
             "connection_status", {"port": PORT, "connected": False}
         )
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
+        listener.close()

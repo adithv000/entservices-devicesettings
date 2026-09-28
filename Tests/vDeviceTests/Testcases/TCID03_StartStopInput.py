@@ -31,20 +31,52 @@
 
 import time
 import os
+from utils import (
+    HDMIIN_CMD_BASE,
+    JsonRpcEventListener,
+    is_ok,
+    log_info,
+    log_error,
+    log_success,
+    log_warning,
+    send_curl_command,
+    send_vcomponent_command,
+    send_vcomponent_payload,
+)
 
-from utils import send_curl_command, is_ok, log_info, log_success, log_error, log_warning
 import AVInput_Curl as AVInputApis
 
 PORT = 0
+EVENT_TIMEOUT = float(os.environ.get("AVINPUT_EVENT_TIMEOUT", "8"))
 
+def _expect_input_status_changed(listener, expected_status):
+    notification = listener.wait_for_event(
+        lambda params: (
+            str(params.get("id")) == str(PORT)
+            and params.get("status") == expected_status
+        ),
+        timeout=EVENT_TIMEOUT,
+    )
+    if notification is None:
+        log_error(
+            "onInputStatusChanged not received for port=0, "
+            f"status={expected_status}"
+        )
+        return False
+    log_success(f"Captured input status change: {notification}")
+    return True
 
 def run_test():
     start_time = time.perf_counter()
 
-    reg = send_curl_command(AVInputApis.register_event("onInputStatusChanged", "ID_onInputStatusChanged"))
-    log_warning(f"register onInputStatusChanged: {reg}")
-    if not is_ok(reg):
-        log_error("TCID03_StartStopInput Failed ❌ (failed to register onInputStatusChanged)")
+    listener = JsonRpcEventListener(
+        AVInputApis.CALLSIGN,
+        "onInputStatusChanged",
+        "ID_TCID03_StartStopInput",
+        timeout=EVENT_TIMEOUT,
+    )
+    if not listener.connect():
+        log_error("TCID03_StartStopInput Failed (event registration rejected)")
         return False
 
     try:
@@ -56,6 +88,9 @@ def run_test():
             return False
         log_success("✅ startInput accepted")
 
+        if not _expect_input_status_changed(listener, "started"):
+            return False
+
         time.sleep(2)
 
         log_info("Executing stopInput (HDMI)")
@@ -66,6 +101,9 @@ def run_test():
             return False
         log_success("✅ stopInput accepted")
 
+        if not _expect_input_status_changed(listener, "stopped"):
+            return False
+
         # Idempotency: a second stopInput must still yield a valid response.
         stop_again = send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
         log_warning(f"stopInput (again) response: {stop_again}")
@@ -74,6 +112,7 @@ def run_test():
             return False
     finally:
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
+        listener.close()
 
     elapsed_time = time.perf_counter() - start_time
     msg = "TCID03_StartStopInput Passed ✅"

@@ -7,11 +7,12 @@
  * @details Injects HDMI hot-plug connection changes through the vComponent
  *          (connection_status -> onConnectionStateChanged in the HAL, which
  *          updates the per-port connected flag surfaced by GetHDMIInStatus) and
- *          verifies each change via the JSON-RPC getInputDevices "connected"
- *          flag. The cycle (connected true -> false) is exercised on every HDMI
- *          input port reported by numberOfInputs (typically port 0 and port 1).
- *          Port 0's connected:true injection uses the static command YAML file;
- *          all other injections use inline payload variants.
+ *          captures each onDevicesChanged notification and verifies each change
+ *          via the JSON-RPC getInputDevices "connected" flag. The cycle
+ *          (connected true -> false) is exercised on every HDMI input port
+ *          reported by numberOfInputs (typically port 0 and port 1). Port 0's
+ *          connected:true injection uses the static command YAML file; all
+ *          other injections use inline payload variants.
  *
  * @precondition
  *  - org.rdk.AVInput plugin is active and reachable via JSON-RPC endpoint.
@@ -22,15 +23,17 @@
  *  - vcomponent_configurations/commands/HDMIInput_Connection_Status.yaml
  *
  * @expected_result
- *  - getInputDevices reports connected == injected value for each tested port.
+ *  - onDevicesChanged and getInputDevices both report connected == injected
+ *    value for each tested port.
  *
  * @pass_criteria
- *  - Both connected:true and connected:false injections are accepted and
- *    reflected in getInputDevices for every tested port; run_test() returns True.
+ *  - Both connected:true and connected:false injections are accepted, their
+ *    matching events are captured, and both states are reflected in
+ *    getInputDevices for every tested port; run_test() returns True.
  *
  * @failure_criteria
- *  - A YAML post is rejected, the connected flag is not boolean, or the flag
- *    does not track the injected value on any tested port.
+ *  - An injection is rejected, an expected event is absent or malformed, or
+ *    either the event or getter state does not track the injected value.
  */
 """
 
@@ -39,10 +42,10 @@ import os
 
 from utils import (
     HDMIIN_CMD_BASE,
+    JsonRpcEventListener,
     send_curl_command,
     send_vcomponent_command,
     send_vcomponent_payload,
-    is_ok,
     log_info,
     log_success,
     log_error,
@@ -52,6 +55,7 @@ import AVInput_Curl as AVInputApis
 from AVInput_Helpers import parse_input_devices, get_device_connected, parse_number_of_inputs
 
 CONNECTION_YAML = "HDMIInput_Connection_Status.yaml"
+EVENT_TIMEOUT = float(os.environ.get("AVINPUT_EVENT_TIMEOUT", "8"))
 
 
 def _post_connection_file():
@@ -83,7 +87,21 @@ def _resolve_ports():
     return list(range(count))
 
 
-def _verify_port(port):
+def _expect_connection_event(listener, port, connected):
+    notification = listener.wait_for_event(
+        lambda params: get_device_connected(params.get("devices"), port) is connected,
+        timeout=EVENT_TIMEOUT,
+    )
+    if notification is None:
+        return False, (
+            f"onDevicesChanged not received with connected={connected} "
+            f"for port {port}"
+        )
+    log_success(f"Captured onDevicesChanged for port {port}: {notification}")
+    return True, None
+
+
+def _verify_port(listener, port):
     # Port 0's "connected=true" uses the static command file; others use payload.
     log_info(f"--- Port {port}: hot-plug connect/disconnect cycle ---")
     baseline = _read_connected(port)
@@ -97,7 +115,9 @@ def _verify_port(port):
         posted = _post_connection(port, True)
     if not posted:
         return False, f"connected:true injection rejected for port {port}"
-    time.sleep(1)
+    event_ok, failure = _expect_connection_event(listener, port, True)
+    if not event_ok:
+        return False, failure
 
     after_true = _read_connected(port)
     log_info(f"connected(port {port}) after true injection = {after_true}")
@@ -110,7 +130,9 @@ def _verify_port(port):
     log_info(f"Injecting connection_status(port={port}, connected=false) via inline payload")
     if not _post_connection(port, False):
         return False, f"connected:false injection rejected for port {port}"
-    time.sleep(1)
+    event_ok, failure = _expect_connection_event(listener, port, False)
+    if not event_ok:
+        return False, failure
 
     after_false = _read_connected(port)
     log_info(f"connected(port {port}) after false injection = {after_false}")
@@ -124,18 +146,22 @@ def _verify_port(port):
 
 def run_test():
     start_time = time.perf_counter()
-
-    reg = send_curl_command(AVInputApis.register_event("onInputStatusChanged", "ID_TCID24_status"))
-    log_warning(f"register onInputStatusChanged: {reg}")
-    reg_dev = send_curl_command(AVInputApis.register_event("onDevicesChanged", "ID_TCID24_devices"))
-    log_warning(f"register onDevicesChanged: {reg_dev}")
+    listener = JsonRpcEventListener(
+        AVInputApis.CALLSIGN,
+        "onDevicesChanged",
+        "ID_TCID24_devices",
+        timeout=EVENT_TIMEOUT,
+    )
+    if not listener.connect():
+        log_error("TCID24_ConnectionStatusUpdate Failed (event registration rejected)")
+        return False
 
     ports = _resolve_ports()
     log_info(f"Testing HDMI input connection status on ports: {ports}")
 
     try:
         for port in ports:
-            ok, failure = _verify_port(port)
+            ok, failure = _verify_port(listener, port)
             if not ok:
                 log_error(f"TCID24_ConnectionStatusUpdate Failed ❌ ({failure})")
                 return False
@@ -143,6 +169,7 @@ def run_test():
         for port in ports:
             _post_connection(port, False)
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
+        listener.close()
 
     elapsed_time = time.perf_counter() - start_time
     msg = "TCID24_ConnectionStatusUpdate Passed ✅"

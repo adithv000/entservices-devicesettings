@@ -20,12 +20,15 @@ Run a single test (repeatable):
   python3 SuiteManager.py devicesettings_scenarios --test TCID14_EdidProvisioningWorkflow
 
 Default Actions:
-Plugin activation is done by default before suite execution:
-- avinput -> Controller.1.activate(callsign=org.rdk.AVInput)
-- Init_AVInput_Populate is run to establish a known baseline (reads
-  numberOfInputs / getInputDevices and issues a best-effort stopInput).
+Plugin activation and deactivation are done around every testcase by default:
+- Controller.1.activate(callsign=org.rdk.DeviceSettings)
+- Controller.1.activate(callsign=org.rdk.AVInput)
+- Init_AVInput_Populate establishes a known baseline (reads numberOfInputs /
+  getInputDevices and issues a best-effort stopInput).
+- The testcase runs.
+- org.rdk.AVInput and org.rdk.DeviceSettings are deactivated in reverse order.
 
-Disable default activation only if needed:
+Disable automatic plugin lifecycle management only if needed:
 - export AUTO_ACTIVATE_PLUGINS=0
 
 ENDPOINTS / DEFAULTS
@@ -37,6 +40,10 @@ Useful overrides:
 - TARGET_HOST                 (applies to the endpoint)
 - JSONRPC_PORT
 - WPEFRAMEWORK_JSONRPC_URL     (full URL, highest priority)
+- AVINPUT_EVENT_TIMEOUT        (seconds to wait for each notification; default 8)
+
+TCID28 and TCID29 capture JSON-RPC notifications over a persistent WebSocket
+implemented with the Python standard library; no pip packages are required.
 
 Examples:
 
@@ -93,8 +100,14 @@ TCID22_DisconnectedPortBehaviour  - locks in graceful degradation on a port with
                                    no source (empty video mode, not errors).
 TCID23_AidlEventCoverage          - injects connection, signal, VIC, VRR, AVI,
                                    audio, SPD, DRM, VSIF, and HDCP events.
-TCID28_SignalStatusNotification   - drives HDMI signal transitions through the
-                                   vComponent for onSignalChanged log tracing.
+TCID28_StableSignalState          - drives HDMI signal transitions and captures
+                                   each onSignalChanged notification.
+TCID29_NoSigToStableSignalTransition - captures no-signal, unstable-signal, and
+                                      stable-signal notifications in order.
+TCID30_InvalidPortStartStopInput  - rejects startInput with invalid portId 10,
+                                   then verifies normal stop/start still works.
+TCID31_AviInfoFrameNotification  - posts the AVI InfoFrame YAML and captures the
+                                   aviContentTypeUpdate notification.
 
 VERIFIED JSON-RPC CONTRACT
 --------------------------

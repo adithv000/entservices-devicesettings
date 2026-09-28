@@ -6,10 +6,13 @@ produce, allowing the DeviceSettings AIDL listener paths to be exercised on a
 headless vDevice.
 """
 
+import os
 import time
 
 import AVInput_Curl as AVInputApis
+from AVInput_Helpers import get_device_connected
 from utils import (
+    JsonRpcEventListener,
     is_ok,
     log_error,
     log_info,
@@ -20,6 +23,13 @@ from utils import (
 )
 
 PORT = 0
+EVENT_TIMEOUT = float(os.environ.get("AVINPUT_EVENT_TIMEOUT", "8"))
+SIGNAL_STATUS_BY_STATE = {
+    "NO_SIGNAL": AVInputApis.SIGNAL_NO,
+    "UNSTABLE": AVInputApis.SIGNAL_UNSTABLE,
+    "NOT_SUPPORTED": AVInputApis.SIGNAL_NOT_SUPPORTED,
+    "LOCKED": AVInputApis.SIGNAL_STABLE,
+}
 
 
 def _post(command, **params):
@@ -41,25 +51,61 @@ def _avi_frame(content_type=None):
     return frame
 
 
-def run_test():
-    for event in (
-        "onDevicesChanged",
-        "onSignalChanged",
-        "onInputStatusChanged",
-        "aviContentTypeUpdate",
-    ):
-        response = send_curl_command(
-            AVInputApis.register_event(event, f"ID_AIDL_{event}")
+def _connect_listeners():
+    listeners = {
+        event: JsonRpcEventListener(
+            AVInputApis.CALLSIGN,
+            event,
+            f"ID_TCID23_{event}",
+            timeout=EVENT_TIMEOUT,
         )
-        if not is_ok(response):
-            log_warning(f"Event registration not available for {event}: {response}")
+        for event in (
+            "onDevicesChanged",
+            "onSignalChanged",
+            "onInputStatusChanged",
+            "aviContentTypeUpdate",
+        )
+    }
+    for event, listener in listeners.items():
+        if not listener.connect():
+            log_error(f"TCID23_AidlEventCoverage Failed ({event} registration rejected)")
+            for registered_listener in listeners.values():
+                registered_listener.close()
+            return None
+    return listeners
 
-    start_response = send_curl_command(AVInputApis.start_input(PORT))
-    if not is_ok(start_response):
-        log_error(f"Unable to start HDMI input before AIDL stimulus: {start_response}")
+
+def _expect_event(listener, event, predicate, description):
+    notification = listener.wait_for_event(predicate, timeout=EVENT_TIMEOUT)
+    if notification is None:
+        log_error(f"{event} not received: {description}")
+        return False
+    log_success(f"Captured {event}: {notification}")
+    return True
+
+
+def run_test():
+    listeners = _connect_listeners()
+    if listeners is None:
         return False
 
-    stimuli = [
+    try:
+        start_response = send_curl_command(AVInputApis.start_input(PORT))
+        if not is_ok(start_response):
+            log_error(f"Unable to start HDMI input before AIDL stimulus: {start_response}")
+            return False
+        if not _expect_event(
+            listeners["onInputStatusChanged"],
+            "onInputStatusChanged",
+            lambda params: (
+                str(params.get("id")) == str(PORT)
+                and params.get("status") == "started"
+            ),
+            "port=0, status=started",
+        ):
+            return False
+
+        stimuli = [
         ("connection_status", {"connected": True}),
         ("signal_status", {"state": "NO_SIGNAL"}),
         ("signal_status", {"state": "UNSTABLE"}),
@@ -67,8 +113,8 @@ def run_test():
         ("signal_status", {"state": "LOCKED"}),
     ]
 
-    # One VIC from every resolution/frame-rate branch, including 4:3 and interlaced.
-    for vic in (
+        # One VIC from every resolution/frame-rate branch, including 4:3 and interlaced.
+        for vic in (
         "VIC1_640_480_P_60_4_3",
         "VIC17_720_576_P_50_4_3",
         "VIC4_1280_720_P_60_16_9",
@@ -84,10 +130,10 @@ def run_test():
         "VIC61_1280_720_P_25_16_9",
         "VIC62_1280_720_P_30_16_9",
         "VIC205_7680_4320_P_48_64_27",
-    ):
-        stimuli.append(("videoformat_change", {"format": vic}))
+        ):
+            stimuli.append(("videoformat_change", {"format": vic}))
 
-    stimuli.extend([
+        stimuli.extend([
         ("vrr_status", {
             "vrrActive": False, "M_CONST": False,
             "fastVActive": False, "frameRate": 0.0,
@@ -105,12 +151,12 @@ def run_test():
         ("aviinfo_frame", {"data": [0x82, 0x02, 0x04] + [0x00] * 6}),
         ("aviinfo_frame", {"data": [0x82, 0x02, 0x0D] + [0x00] * 6}),
         ("aviinfo_frame", {"data": _avi_frame()}),
-    ])
+        ])
 
-    for content_type in range(4):
-        stimuli.append(("aviinfo_frame", {"data": _avi_frame(content_type)}))
+        for content_type in range(4):
+            stimuli.append(("aviinfo_frame", {"data": _avi_frame(content_type)}))
 
-    stimuli.extend([
+        stimuli.extend([
         ("audioinfo_frame", {
             "data": [0x84, 0x01, 0x0A, 0x70, 0x01, 0x00, 0x00, 0x00,
                      0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
@@ -127,13 +173,46 @@ def run_test():
         ("hdcp_status", {
             "state": "AUTHENTICATED", "version": "VERSION_2_X",
         }),
-    ])
+        ])
 
-    try:
         log_info(f"Injecting {len(stimuli)} AIDL HDMI events")
         for command, params in stimuli:
             if not _post(command, **params):
                 return False
+            if command == "connection_status":
+                if not _expect_event(
+                    listeners["onDevicesChanged"],
+                    "onDevicesChanged",
+                    lambda event_params: get_device_connected(
+                        event_params.get("devices"), PORT
+                    ) is params["connected"],
+                    f"port=0, connected={params['connected']}",
+                ):
+                    return False
+            elif command == "signal_status":
+                expected_status = SIGNAL_STATUS_BY_STATE[params["state"]]
+                if not _expect_event(
+                    listeners["onSignalChanged"],
+                    "onSignalChanged",
+                    lambda event_params: (
+                        str(event_params.get("id")) == str(PORT)
+                        and event_params.get("signalStatus") == expected_status
+                    ),
+                    f"port=0, signalStatus={expected_status}",
+                ):
+                    return False
+            elif command == "aviinfo_frame" and params["data"] == _avi_frame():
+                if not _expect_event(
+                    listeners["aviContentTypeUpdate"],
+                    "aviContentTypeUpdate",
+                    lambda event_params: (
+                        str(event_params.get("id")) == str(PORT)
+                        and event_params.get("aviContentType")
+                        == AVInputApis.AVI_CONTENT_INVALID
+                    ),
+                    f"port=0, aviContentType={AVInputApis.AVI_CONTENT_INVALID}",
+                ):
+                    return False
 
         send_curl_command(AVInputApis.current_video_mode)
         send_curl_command(AVInputApis.get_vrr_frame_rate(PORT))
@@ -150,9 +229,29 @@ def run_test():
         if not is_ok(stop_response):
             log_error(f"Unable to stop HDMI input before state readback: {stop_response}")
             return False
+        if not _expect_event(
+            listeners["onInputStatusChanged"],
+            "onInputStatusChanged",
+            lambda params: (
+                str(params.get("id")) == str(PORT)
+                and params.get("status") == "stopped"
+            ),
+            "port=0, status=stopped",
+        ):
+            return False
         start_response = send_curl_command(AVInputApis.start_input(PORT))
         if not is_ok(start_response):
             log_error(f"Unable to restart HDMI input for state readback: {start_response}")
+            return False
+        if not _expect_event(
+            listeners["onInputStatusChanged"],
+            "onInputStatusChanged",
+            lambda params: (
+                str(params.get("id")) == str(PORT)
+                and params.get("status") == "started"
+            ),
+            "port=0, status=started after restart",
+        ):
             return False
         if not is_ok(send_curl_command(AVInputApis.current_video_mode)):
             log_error("currentVideoMode failed after HDMI input restart")
@@ -168,6 +267,8 @@ def run_test():
             frameRate=0.0,
         )
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
+        for listener in listeners.values():
+            listener.close()
 
     log_success("TCID23_AidlEventCoverage Passed")
     return True

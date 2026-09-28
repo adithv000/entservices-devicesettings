@@ -4,9 +4,10 @@
  * @brief L3 AVInput vComponent-driven testcase.
  *
  * @testcase TCID26_VrrStatusUpdate
- * @details Reads getVRRSupport, injects a live VRR status change through the
- *          vComponent (HDMIInput_VRR_Status.yaml -> onVRRChanged in the HAL) and
- *          reads getVRRSupport again.
+ * @details Registers for gameFeatureStatusUpdate, reads getVRRSupport, injects
+ *          a live VRR status change through the vComponent
+ *          (HDMIInput_VRR_Status.yaml -> onVRRChanged in the HAL), captures the
+ *          resulting event, and reads getVRRSupport again.
  *
  * @note Per the HAL (dHdmiInAIDLImpl):
  *         - getVRRSupport returns m_vrrsupport[port], the EDID-advertised VRR
@@ -29,16 +30,16 @@
  *  - vcomponent_configurations/commands/HDMIInput_VRR_Status.yaml
  *
  * @expected_result
- *  - getVRRSupport is queryable (boolean) before and after the injection and the
- *    injected VRR status is accepted; getVRRFrameRate observes the live change.
+ *  - gameFeatureStatusUpdate reports VRR-FREESYNC enabled, getVRRSupport is
+ *    queryable before and after injection, and getVRRFrameRate observes the change.
  *
  * @pass_criteria
- *  - Both getVRRSupport reads return a boolean, the YAML post is accepted, and
- *    getVRRFrameRate returns a valid number; run_test() returns True.
+ *  - Both getVRRSupport reads return a boolean, the YAML post is accepted, the
+ *    expected event is captured, and getVRRFrameRate returns a valid number.
  *
  * @failure_criteria
- *  - getVRRSupport is non-boolean, the YAML post is rejected, or getVRRFrameRate
- *    is not numeric.
+ *  - getVRRSupport is non-boolean, the YAML post is rejected, the expected
+ *    event is absent, or getVRRFrameRate is not numeric.
  */
 """
 
@@ -47,6 +48,7 @@ import os
 
 from utils import (
     HDMIIN_CMD_BASE,
+    JsonRpcEventListener,
     send_curl_command,
     send_vcomponent_command,
     send_vcomponent_payload,
@@ -63,6 +65,7 @@ PORT = 0
 CONNECTION_YAML = "HDMIInput_Connection_Status.yaml"
 SIGNAL_YAML = "HDMIInput_Signal_Status.yaml"
 VRR_YAML = "HDMIInput_VRR_Status.yaml"
+EVENT_TIMEOUT = float(os.environ.get("AVINPUT_EVENT_TIMEOUT", "8"))
 
 
 def _post_file(name):
@@ -96,8 +99,36 @@ def _read_vrr_frame_rate():
     return parse_vrr_frame_rate(response)
 
 
+def _expect_vrr_enabled(listener):
+    notification = listener.wait_for_event(
+        lambda params: (
+            str(params.get("id")) == str(PORT)
+            and params.get("gameFeature") == "VRR-FREESYNC"
+            and params.get("mode") is True
+        ),
+        timeout=EVENT_TIMEOUT,
+    )
+    if notification is None:
+        log_error(
+            "gameFeatureStatusUpdate not received for port=0, "
+            "gameFeature='VRR-FREESYNC', mode=true"
+        )
+        return False
+    log_success(f"Captured gameFeatureStatusUpdate: {notification}")
+    return True
+
+
 def run_test():
     start_time = time.perf_counter()
+    listener = JsonRpcEventListener(
+        AVInputApis.CALLSIGN,
+        "gameFeatureStatusUpdate",
+        "ID_TCID26_vrr_status",
+        timeout=EVENT_TIMEOUT,
+    )
+    if not listener.connect():
+        log_error("TCID26_VrrStatusUpdate Failed (event registration rejected)")
+        return False
 
     try:
         log_info("Step 1: startInput on port 0")
@@ -124,7 +155,9 @@ def run_test():
         if not _post_vrr_file():
             log_error("TCID26_VrrStatusUpdate Failed ❌ (vrr_status YAML rejected)")
             return False
-        time.sleep(2)
+        if not _expect_vrr_enabled(listener):
+            log_error("TCID26_VrrStatusUpdate Failed ❌ (VRR event not captured)")
+            return False
 
         # Step 5: read getVRRSupport AGAIN and print it. This is EXPECTED to stay
         # unchanged: getVRRSupport returns m_vrrsupport[port] (the EDID-advertised
@@ -161,6 +194,7 @@ def run_test():
         send_vcomponent_payload("signal_status", {"port": PORT, "state": "NO_SIGNAL"})
         send_vcomponent_payload("connection_status", {"port": PORT, "connected": False})
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
+        listener.close()
 
     elapsed_time = time.perf_counter() - start_time
     msg = "TCID26_VrrStatusUpdate Passed ✅"
