@@ -37,6 +37,33 @@ namespace dHdmiIn {
 
     class IPlatform {
 
+    protected:
+        static void updateVRRBitValuesInPersistence(dsHdmiInPort_t iHdmiPort, bool vrrSupport)
+        {
+            DSLOG_INFO("Updating values of vrr bit in persistence");
+            switch(iHdmiPort){
+                case dsHDMI_IN_PORT_0:
+                    device::HostPersistence::getInstance().persistHostProperty("HDMI0.vrrEnable", vrrSupport ? "TRUE" : "FALSE");
+                    DSLOG_INFO("Port %s: Persist EDID VRR Bit: %d", "HDMI0", vrrSupport);
+                    break;
+                case dsHDMI_IN_PORT_1:
+                    device::HostPersistence::getInstance().persistHostProperty("HDMI1.vrrEnable", vrrSupport ? "TRUE" : "FALSE");
+                    DSLOG_INFO("Port %s: Persist EDID VRR Bit: %d", "HDMI1", vrrSupport);
+                    break;
+                case dsHDMI_IN_PORT_2:
+                    device::HostPersistence::getInstance().persistHostProperty("HDMI2.vrrEnable", vrrSupport ? "TRUE" : "FALSE");
+                    DSLOG_INFO("Port %s: Persist EDID VRR Bit: %d", "HDMI2", vrrSupport);
+                    break;
+                case dsHDMI_IN_PORT_3:
+                    device::HostPersistence::getInstance().persistHostProperty("HDMI3.vrrEnable", vrrSupport ? "TRUE" : "FALSE");
+                    DSLOG_INFO("Port %s: Persist EDID VRR Bit: %d", "HDMI3", vrrSupport);
+                    break;
+                default:
+                    DSLOG_WARN("Invalid HDMI port %d for VRR persistence update", iHdmiPort);
+                    break;
+            }
+        }
+
     public:
         virtual ~IPlatform();
         void InitialiseHAL();

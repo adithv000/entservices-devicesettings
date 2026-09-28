@@ -32,6 +32,7 @@
 #include <string>
 
 #include "dHdmiIn.h"
+#include "utils/VideoResolutionUtils.h"
 #include "dsHdmiIn.h"
 #include "dsError.h"
 #include "dsHdmiInTypes.h"
@@ -361,42 +362,8 @@ private:
 
     static std::string getResolutionStr (dsVideoResolution_t resolution)
     {
-        std::string resolutionStr;
-
-        switch (resolution)
-        {
-            case dsVIDEO_PIXELRES_720x480:
-                resolutionStr = "480";
-                break;
-
-            case dsVIDEO_PIXELRES_720x576:
-                resolutionStr = "576";
-                break;
-
-            case dsVIDEO_PIXELRES_1280x720:
-                resolutionStr = "720";
-                break;
-
-            case dsVIDEO_PIXELRES_1366x768:
-                resolutionStr = "1366x768";
-                break;
-
-            case dsVIDEO_PIXELRES_1920x1080:
-                resolutionStr = "1080";
-                break;
-
-            case dsVIDEO_PIXELRES_3840x2160:
-                resolutionStr = "3840x2160";
-                break;
-
-            case dsVIDEO_PIXELRES_4096x2160:
-                resolutionStr = "4096x2160";
-                break;
-
-            default:
-                resolutionStr = "unknown";
-                break;
-        }
+        const auto* info = hal::video::getResolutionInfo(resolution);
+        std::string resolutionStr = info ? info->resolutionStr : "unknown";
 
         LOGINFO("ResolutionStr: %s", resolutionStr.c_str());
         return resolutionStr;
@@ -404,89 +371,22 @@ private:
 
     static std::string getFrameRateStr (dsVideoFrameRate_t frameRate)
     {
-        std::string FrameRateStr;
-
-        switch (frameRate)
-        {
-            case dsVIDEO_FRAMERATE_24:
-                FrameRateStr = "24";
-                break;
-
-            case dsVIDEO_FRAMERATE_25:
-                FrameRateStr = "25";
-                break;
-
-            case dsVIDEO_FRAMERATE_30:
-                FrameRateStr = "30";
-                break;
-
-            case dsVIDEO_FRAMERATE_60:
-                FrameRateStr = "60";
-                break;
-
-            case dsVIDEO_FRAMERATE_23dot98:
-                FrameRateStr = "23.98";
-                break;
-
-            case dsVIDEO_FRAMERATE_29dot97:
-                FrameRateStr = "29.97";
-                break;
-
-            case dsVIDEO_FRAMERATE_50:
-                FrameRateStr = "50";
-                break;
-
-            case dsVIDEO_FRAMERATE_59dot94:
-                FrameRateStr = "59.94";
-                break;
-
-            case dsVIDEO_FRAMERATE_100:
-                FrameRateStr = "100";
-                break;
-
-            case dsVIDEO_FRAMERATE_119dot88:
-                FrameRateStr = "119.88";
-                break;
-
-            case dsVIDEO_FRAMERATE_120:
-                FrameRateStr = "120";
-                break;
-
-            case dsVIDEO_FRAMERATE_200:
-                FrameRateStr = "200";
-                break;
-
-            case dsVIDEO_FRAMERATE_239dot76:
-                FrameRateStr = "239.76";
-                break;
-
-            case dsVIDEO_FRAMERATE_240:
-                FrameRateStr = "240";
-                break;
-
-            default:
-                // Not all video formats have a specified framerate.
-                break;
-        }
+        const auto* info = hal::video::getFrameRateInfo(frameRate);
+        std::string FrameRateStr = info ? info->frameRateStr : "";
 
         LOGINFO("FrameRateStr: %s", FrameRateStr.c_str());
         return FrameRateStr;
-    }
-
-    static std::string getInterlacedStr (bool interlaced)
-    {
-        std::string InterlacedStr = (interlaced) ? "i" : "p";
-        LOGINFO("InterlacedStr: %s", InterlacedStr.c_str());
-        return InterlacedStr;
     }
 
     static std::string CreateResolutionStr (const dsVideoPortResolution_t &resolution)
     {
         std::string resolutionStr = getResolutionStr(resolution.pixelResolution);
         if(resolutionStr.compare("unknown") != 0){
-            resolutionStr = getResolutionStr(resolution.pixelResolution) +
-                                    getInterlacedStr(resolution.interlaced) +
-                                    getFrameRateStr(resolution.frameRate);
+            resolutionStr = getResolutionStr(resolution.pixelResolution);
+            const char* interlacedStr = hal::video::getInterlacedStr(resolution.interlaced);
+            LOGINFO("InterlacedStr: %s", interlacedStr);
+            resolutionStr += interlacedStr;
+            resolutionStr += getFrameRateStr(resolution.frameRate);
         }
         LOGINFO("resolutionStr : %s", resolutionStr.c_str());
         return resolutionStr;
@@ -954,26 +854,6 @@ private:
                 LOGINFO("Port HDMI3: Persist EDID Allm Bit: %d", allmSupport); break;
             default:
                 LOGWARN("Invalid HDMI port %d for ALLM persistence update", iHdmiPort); break;
-        }
-    }
-
-    void updateVRRBitValuesInPersistence(dsHdmiInPort_t iHdmiPort, bool vrrSupport)
-    {
-        switch (iHdmiPort) {
-            case dsHDMI_IN_PORT_0:
-                device::HostPersistence::getInstance().persistHostProperty("HDMI0.vrrEnable", vrrSupport ? "TRUE" : "FALSE");
-                LOGINFO("Port HDMI0: Persist EDID VRR Bit: %d", vrrSupport); break;
-            case dsHDMI_IN_PORT_1:
-                device::HostPersistence::getInstance().persistHostProperty("HDMI1.vrrEnable", vrrSupport ? "TRUE" : "FALSE");
-                LOGINFO("Port HDMI1: Persist EDID VRR Bit: %d", vrrSupport); break;
-            case dsHDMI_IN_PORT_2:
-                device::HostPersistence::getInstance().persistHostProperty("HDMI2.vrrEnable", vrrSupport ? "TRUE" : "FALSE");
-                LOGINFO("Port HDMI2: Persist EDID VRR Bit: %d", vrrSupport); break;
-            case dsHDMI_IN_PORT_3:
-                device::HostPersistence::getInstance().persistHostProperty("HDMI3.vrrEnable", vrrSupport ? "TRUE" : "FALSE");
-                LOGINFO("Port HDMI3: Persist EDID VRR Bit: %d", vrrSupport); break;
-            default:
-                LOGWARN("Invalid HDMI port %d for VRR persistence update", iHdmiPort); break;
         }
     }
 

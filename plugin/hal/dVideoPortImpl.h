@@ -27,6 +27,7 @@
 #include <functional>
 #include <string>
 #include "dVideoPort.h"
+#include "utils/VideoResolutionUtils.h"
 #include "dsVideoPort.h"
 #include "dsError.h"
 #include "dsUtl.h"
@@ -513,17 +514,8 @@ public:
         dsVideoPortResolution_t dsResolution;
         dsError_t eError = dsGetResolution(handle, &dsResolution);
         if (eError == dsERR_NONE) {
-            switch (dsResolution.frameRate) {
-                case dsVIDEO_FRAMERATE_24:   frameRate = 24;  break;
-                case dsVIDEO_FRAMERATE_25:   frameRate = 25;  break;
-                case dsVIDEO_FRAMERATE_30:   frameRate = 30;  break;
-                case dsVIDEO_FRAMERATE_50:   frameRate = 50;  break;
-                case dsVIDEO_FRAMERATE_60:   frameRate = 60;  break;
-                case dsVIDEO_FRAMERATE_23dot98:  frameRate = 24; break;
-                case dsVIDEO_FRAMERATE_29dot97:  frameRate = 30; break;
-                case dsVIDEO_FRAMERATE_59dot94:  frameRate = 60; break;
-                default:                     frameRate = 60;  break;
-            }
+            const auto* info = hal::video::getFrameRateInfo(dsResolution.frameRate);
+            frameRate = (info && info->nominalFrameRate <= 60) ? info->nominalFrameRate : 60;
             retCode = WPEFramework::Core::ERROR_NONE;
             DSLOG_INFO(" SUCCESS - frameRate=%u (from resolution %s)", frameRate, dsResolution.name);
         } else {
@@ -1687,6 +1679,20 @@ public:
         return eRet;
     }
 
+    static void populateResolutionDimensions(dsVideoResolution_t resolution, ResolutionChange& resolutionChange)
+    {
+        const auto* info = hal::video::getResolutionInfo(resolution);
+        if (info) {
+            resolutionChange.width = info->width;
+            resolutionChange.height = info->height;
+            return;
+        }
+
+        resolutionChange.width = 1280;
+        resolutionChange.height = 720;
+        DSLOG_ERR("Unknown pixel resolution: %d, defaulting to 720p", resolution);
+    }
+
     // Resolution Change Helper Functions - Following dsVideoPort.c RPC server pattern
     static void VideoPortPreResolutionChange(dsVideoPortResolution_t* resolution)
     {
@@ -1699,41 +1705,7 @@ public:
         
         // Convert dsVideoPortResolution_t to ResolutionChange structure - based on dsVideoPort.c
         ResolutionChange resolutionChange;
-        switch(resolution->pixelResolution) {
-            case dsVIDEO_PIXELRES_720x480:
-                resolutionChange.width = 720;
-                resolutionChange.height = 480;
-                break;
-            case dsVIDEO_PIXELRES_720x576:
-                resolutionChange.width = 720;
-                resolutionChange.height = 576;
-                break;
-            case dsVIDEO_PIXELRES_1280x720:
-                resolutionChange.width = 1280;
-                resolutionChange.height = 720;
-                break;
-            case dsVIDEO_PIXELRES_1366x768:
-                resolutionChange.width = 1366;
-                resolutionChange.height = 768;
-                break;
-            case dsVIDEO_PIXELRES_1920x1080:
-                resolutionChange.width = 1920;
-                resolutionChange.height = 1080;
-                break;
-            case dsVIDEO_PIXELRES_3840x2160:
-                resolutionChange.width = 3840;
-                resolutionChange.height = 2160;
-                break;
-            case dsVIDEO_PIXELRES_4096x2160:
-                resolutionChange.width = 4096;
-                resolutionChange.height = 2160;
-                break;
-            default:
-                resolutionChange.width = 1280;
-                resolutionChange.height = 720;
-                DSLOG_ERR("Unknown pixel resolution: %d, defaulting to 720p", resolution->pixelResolution);
-                break;
-        }
+        populateResolutionDimensions(resolution->pixelResolution, resolutionChange);
         
         // Call the stored global callback if available
         if (g_VideoPortResolutionPreChangeCallback) {
@@ -1751,41 +1723,7 @@ public:
         DSLOG_INFO(" pixelResolution=%d", resolution->pixelResolution);
 
         ResolutionChange resolutionChange;
-        switch(resolution->pixelResolution) {
-            case dsVIDEO_PIXELRES_720x480:
-                resolutionChange.width = 720;
-                resolutionChange.height = 480;
-                break;
-            case dsVIDEO_PIXELRES_720x576:
-                resolutionChange.width = 720;
-                resolutionChange.height = 576;
-                break;
-            case dsVIDEO_PIXELRES_1280x720:
-                resolutionChange.width = 1280;
-                resolutionChange.height = 720;
-                break;
-            case dsVIDEO_PIXELRES_1366x768:
-                resolutionChange.width = 1366;
-                resolutionChange.height = 768;
-                break;
-            case dsVIDEO_PIXELRES_1920x1080:
-                resolutionChange.width = 1920;
-                resolutionChange.height = 1080;
-                break;
-            case dsVIDEO_PIXELRES_3840x2160:
-                resolutionChange.width = 3840;
-                resolutionChange.height = 2160;
-                break;
-            case dsVIDEO_PIXELRES_4096x2160:
-                resolutionChange.width = 4096;
-                resolutionChange.height = 2160;
-                break;
-            default:
-                resolutionChange.width = 1280;
-                resolutionChange.height = 720;
-                DSLOG_ERR("Unknown pixel resolution: %d, defaulting to 720p", resolution->pixelResolution);
-                break;
-        }
+        populateResolutionDimensions(resolution->pixelResolution, resolutionChange);
 
         // Call the stored global callback if available
         if (g_VideoPortResolutionPostChangeCallback) {
@@ -2028,10 +1966,10 @@ private:
         } else {
             switch (dsResolution.pixelResolution) {
                 case dsVIDEO_PIXELRES_720x480:
-                    resolution.name = dsResolution.interlaced ? "480i" : "480p";
+                    resolution.name = std::string("480") + hal::video::getInterlacedStr(dsResolution.interlaced);
                     break;
                 case dsVIDEO_PIXELRES_720x576:
-                    resolution.name = dsResolution.interlaced ? "576i50" : "576p50";
+                    resolution.name = std::string("576") + hal::video::getInterlacedStr(dsResolution.interlaced) + "50";
                     break;
                 case dsVIDEO_PIXELRES_1280x720:
                     resolution.name = "720p";
@@ -2040,7 +1978,7 @@ private:
                     resolution.name = "768p60";
                     break;
                 case dsVIDEO_PIXELRES_1920x1080:
-                    resolution.name = dsResolution.interlaced ? "1080i" : "1080p";
+                    resolution.name = std::string("1080") + hal::video::getInterlacedStr(dsResolution.interlaced);
                     break;
                 case dsVIDEO_PIXELRES_3840x2160:
                     resolution.name = "2160p60";
