@@ -1,0 +1,6 @@
+hdmiinput:
+  command: videoformat_change
+  description: Sends the video format change to HDMI input ports
+  params:
+    port: 0
+    format: VIC16_1920_1080_P_60_16_9

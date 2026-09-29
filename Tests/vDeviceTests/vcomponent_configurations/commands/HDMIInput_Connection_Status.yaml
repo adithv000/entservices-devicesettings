@@ -1,0 +1,6 @@
+hdmiinput:
+  command: connection_status
+  description: Sends the connection status of HDMI input ports
+  params:
+    port: 0
+    connected: true

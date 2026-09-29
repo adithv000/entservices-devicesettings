@@ -1,0 +1,6 @@
+hdmiinput:
+  command: signal_status
+  description: Sends the signal status of HDMI input ports
+  params:
+    port: 0
+    state: LOCKED

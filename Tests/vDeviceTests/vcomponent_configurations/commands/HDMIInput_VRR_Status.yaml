@@ -1,0 +1,9 @@
+hdmiinput:
+  command: vrr_status
+  description: Sends the VRR status of HDMI input ports
+  params:
+    port: 0
+    vrrActive: true
+    M_CONST: true
+    fastVActive: true
+    frameRate: 120.0
