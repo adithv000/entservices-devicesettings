@@ -155,7 +155,7 @@ private:
         CtrlListener(int portId, dHdmiInAIDLImpl* impl) : m_portId(portId), m_impl(impl) {}
 
         ::android::binder::Status onConnectionStateChanged(bool connected) override {
-            LOGINFO("AIDL HDMI-In hot plug event received: port=%d, connected=%s", m_portId, connected ? "true" : "false");
+            DSLOG_INFO("AIDL HDMI-In hot plug event received: port=%d, connected=%s", m_portId, connected ? "true" : "false");
             {
                 std::lock_guard<std::mutex> lk(m_impl->m_aidlMutex);
                 auto it = m_impl->m_aidlPorts.find(m_portId);
@@ -174,7 +174,7 @@ private:
 
         ::android::binder::Status onSignalStateChanged(
                 ::com::rdk::hal::hdmiinput::SignalState signalState) override {
-            LOGINFO("AIDL HDMI-In signal status event received: port=%d, signalState=%d", m_portId, (int)signalState);
+            DSLOG_INFO("AIDL HDMI-In signal status event received: port=%d, signalState=%d", m_portId, (int)signalState);
             {
                 std::lock_guard<std::mutex> lk(m_impl->m_aidlMutex);
                 auto it = m_impl->m_aidlPorts.find(m_portId);
@@ -189,7 +189,7 @@ private:
         }
 
         ::android::binder::Status onVIChanged(::com::rdk::hal::hdmiinput::VIC vic) override {
-            LOGINFO("AIDL HDMI-In video mode event received: port=%d, VIC=%d", m_portId, (int)vic);
+            DSLOG_INFO("AIDL HDMI-In video mode event received: port=%d, VIC=%d", m_portId, (int)vic);
             {
                 std::lock_guard<std::mutex> lk(m_impl->m_aidlMutex);
                 auto it = m_impl->m_aidlPorts.find(m_portId);
@@ -214,7 +214,7 @@ private:
 
         ::android::binder::Status onVRRChanged(
                 bool vrrActive, bool /*mConst*/, bool /*fastV*/, double frameRate) override {
-            LOGINFO("AIDL HDMI-In VRR event received: port=%d, active=%s, frameRate=%.2f",
+            DSLOG_INFO("AIDL HDMI-In VRR event received: port=%d, active=%s, frameRate=%.2f",
                 m_portId, vrrActive ? "true" : "false", frameRate);
             dsVRRType_t vrrType = vrrActive
                 ? (frameRate > 0.0 ? dsVRR_AMD_FREESYNC : dsVRR_HDMI_VRR)
@@ -236,7 +236,7 @@ private:
         }
 
         ::android::binder::Status onAVIInfoFrame(const std::vector<uint8_t>& data) override {
-            LOGINFO("AIDL HDMI-In AVI content type event received: port=%d, length=%zu", m_portId, data.size());
+            DSLOG_INFO("AIDL HDMI-In AVI content type event received: port=%d, length=%zu", m_portId, data.size());
             dsAviContentType_t ct = dsAVICONTENT_TYPE_NOT_SIGNALLED;
             if (!dHdmiInAIDLImpl::aidlParseAviContentType(data, &ct))
                 return ::android::binder::Status::ok();
@@ -249,11 +249,11 @@ private:
         }
 
         ::android::binder::Status onAudioInfoFrame(const std::vector<uint8_t>& data) override {
-            LOGINFO("AIDL HDMI-In audio info frame event received: port=%d, length=%zu", m_portId, data.size());
+            DSLOG_INFO("AIDL HDMI-In audio info frame event received: port=%d, length=%zu", m_portId, data.size());
             return ::android::binder::Status::ok();
         }
         ::android::binder::Status onSPDInfoFrame(const std::vector<uint8_t>& data) override {
-            LOGINFO("AIDL HDMI-In SPD info frame event received: port=%d, length=%zu", m_portId, data.size());
+            DSLOG_INFO("AIDL HDMI-In SPD info frame event received: port=%d, length=%zu", m_portId, data.size());
             std::lock_guard<std::mutex> lk(m_impl->m_aidlMutex);
             auto it = m_impl->m_aidlPorts.find(m_portId);
             if (it != m_impl->m_aidlPorts.end())
@@ -261,17 +261,17 @@ private:
             return ::android::binder::Status::ok();
         }
         ::android::binder::Status onDRMInfoFrame(const std::vector<uint8_t>& data) override {
-            LOGINFO("AIDL HDMI-In DRM info frame event received: port=%d, length=%zu", m_portId, data.size());
+            DSLOG_INFO("AIDL HDMI-In DRM info frame event received: port=%d, length=%zu", m_portId, data.size());
             return ::android::binder::Status::ok();
         }
         ::android::binder::Status onVendorSpecificInfoFrame(const std::vector<uint8_t>& data) override {
-            LOGINFO("AIDL HDMI-In vendor specific info frame event received: port=%d, length=%zu", m_portId, data.size());
+            DSLOG_INFO("AIDL HDMI-In vendor specific info frame event received: port=%d, length=%zu", m_portId, data.size());
             return ::android::binder::Status::ok();
         }
         ::android::binder::Status onHDCPStatusChanged(
                 ::com::rdk::hal::hdmiinput::HDCPStatus status,
                 ::com::rdk::hal::hdmiinput::HDCPProtocolVersion version) override {
-            LOGINFO("AIDL HDMI-In HDCP status event received: port=%d, status=%d, version=%d",
+            DSLOG_INFO("AIDL HDMI-In HDCP status event received: port=%d, status=%d, version=%d",
                     m_portId, (int)status, (int)version);
             return ::android::binder::Status::ok();
         }
@@ -288,7 +288,7 @@ private:
         ::android::binder::Status onStateChanged(
                 ::com::rdk::hal::hdmiinput::State oldState,
                 ::com::rdk::hal::hdmiinput::State newState) override {
-            LOGINFO("AIDL HDMI-In status event received: port=%d, oldState=%d, newState=%d",
+            DSLOG_INFO("AIDL HDMI-In status event received: port=%d, oldState=%d, newState=%d",
                     m_portId, (int)oldState, (int)newState);
             bool presented = (newState == ::com::rdk::hal::hdmiinput::State::STARTED);
             {
@@ -303,7 +303,7 @@ private:
             return ::android::binder::Status::ok();
         }
         ::android::binder::Status onEDIDChange(const std::vector<uint8_t>& data) override {
-            LOGINFO("AIDL HDMI-In EDID change event received: port=%d, length=%zu", m_portId, data.size());
+            DSLOG_INFO("AIDL HDMI-In EDID change event received: port=%d, length=%zu", m_portId, data.size());
             return ::android::binder::Status::ok();
         }
     private:
@@ -325,7 +325,7 @@ private:
     void onAidlServiceDied()
     {
         std::lock_guard<std::mutex> lk(m_aidlMutex);
-        LOGERR("IHDMIInputManager Binder died; clearing cached AIDL interfaces");
+        DSLOG_ERR("IHDMIInputManager Binder died; clearing cached AIDL interfaces");
         clearAidlStateLocked();
     }
 
@@ -379,7 +379,7 @@ private:
         const auto* info = hal::video::getResolutionInfo(resolution);
         std::string resolutionStr = info ? info->resolutionStr : "unknown";
 
-        LOGINFO("ResolutionStr: %s", resolutionStr.c_str());
+        DSLOG_INFO("ResolutionStr: %s", resolutionStr.c_str());
         return resolutionStr;
     }
 
@@ -388,7 +388,7 @@ private:
         const auto* info = hal::video::getFrameRateInfo(frameRate);
         std::string FrameRateStr = info ? info->frameRateStr : "";
 
-        LOGINFO("FrameRateStr: %s", FrameRateStr.c_str());
+        DSLOG_INFO("FrameRateStr: %s", FrameRateStr.c_str());
         return FrameRateStr;
     }
 
@@ -398,11 +398,11 @@ private:
         if(resolutionStr.compare("unknown") != 0){
             resolutionStr = getResolutionStr(resolution.pixelResolution);
             const char* interlacedStr = hal::video::getInterlacedStr(resolution.interlaced);
-            LOGINFO("InterlacedStr: %s", interlacedStr);
+            DSLOG_INFO("InterlacedStr: %s", interlacedStr);
             resolutionStr += interlacedStr;
             resolutionStr += getFrameRateStr(resolution.frameRate);
         }
-        LOGINFO("resolutionStr : %s", resolutionStr.c_str());
+        DSLOG_INFO("resolutionStr : %s", resolutionStr.c_str());
         return resolutionStr;
     }
 
@@ -764,17 +764,17 @@ private:
     void aidlHdmiInInit()
     {
         sp<IHDMIInputManager> mgr = getAidlHdmiMgr();
-        if (!mgr) { LOGERR("IHDMIInputManager unavailable"); return; }
+        if (!mgr) { DSLOG_ERR("IHDMIInputManager unavailable"); return; }
 
         std::vector<IHDMIInput::Id> portIds;
-        if (!mgr->getHDMIInputIds(&portIds).isOk()) { LOGERR("getHDMIInputIds failed"); return; }
+        if (!mgr->getHDMIInputIds(&portIds).isOk()) { DSLOG_ERR("getHDMIInputIds failed"); return; }
         m_aidlPortCount = (uint8_t)portIds.size();
 
         for (const auto& id : portIds) {
             int portIdx = id.value;
             sp<IHDMIInput> hdmiInput;
             if (!mgr->getHDMIInput(id, &hdmiInput).isOk() || !hdmiInput) {
-                LOGERR("getHDMIInput failed for port %d", portIdx);
+                DSLOG_ERR("getHDMIInput failed for port %d", portIdx);
                 continue;
             }
             AidlPortCtx ctx;
@@ -799,7 +799,7 @@ private:
 
             std::lock_guard<std::mutex> lk(m_aidlMutex);
             m_aidlPorts[portIdx] = std::move(ctx);
-            LOGINFO("AIDL port %d initialised", portIdx);
+            DSLOG_INFO("AIDL port %d initialised", portIdx);
         }
     }
 
@@ -829,12 +829,12 @@ private:
     {
         RFC_ParamData_t param = {0};
         WDMP_STATUS status = getRFCParameter((char*)"dssrv", TVSETTINGS_DALS_RFC_PARAM, &param);
-        LOGINFO("DALS Feature Enable = [ %s ]", param.value);
+        DSLOG_INFO("DALS Feature Enable = [ %s ]", param.value);
         if (WDMP_SUCCESS == status && (strncasecmp(param.value, "true", 4) == 0)) {
             m_isDalsEnabled = true;
-            LOGINFO("Value of isDalsEnabled = [ %d ]", m_isDalsEnabled);
+            DSLOG_INFO("Value of isDalsEnabled = [ %d ]", m_isDalsEnabled);
         } else {
-            LOGERR("Fetching RFC for DALS failed or DALS is disabled: %d", status);
+            DSLOG_ERR("Fetching RFC for DALS failed or DALS is disabled: %d", status);
         }
     }
 
@@ -843,10 +843,10 @@ private:
         try {
             std::string value = device::HostPersistence::getInstance().getProperty(propertyName, "TRUE");
             bool support = (value == "TRUE");
-            LOGINFO("Port property %s: Value: %s, Parsed: %d", propertyName.c_str(), value.c_str(), support);
+            DSLOG_INFO("Port property %s: Value: %s, Parsed: %d", propertyName.c_str(), value.c_str(), support);
             return support;
         } catch (...) {
-            LOGERR("Port property %s: Exception getting property, using default TRUE", propertyName.c_str());
+            DSLOG_ERR("Port property %s: Exception getting property, using default TRUE", propertyName.c_str());
             return true;
         }
     }
@@ -856,31 +856,31 @@ private:
         switch (iHdmiPort) {
             case dsHDMI_IN_PORT_0:
                 device::HostPersistence::getInstance().persistHostProperty("HDMI0.edidallmEnable", allmSupport ? "TRUE" : "FALSE");
-                LOGINFO("Port HDMI0: Persist EDID Allm Bit: %d", allmSupport); break;
+                DSLOG_INFO("Port HDMI0: Persist EDID Allm Bit: %d", allmSupport); break;
             case dsHDMI_IN_PORT_1:
                 device::HostPersistence::getInstance().persistHostProperty("HDMI1.edidallmEnable", allmSupport ? "TRUE" : "FALSE");
-                LOGINFO("Port HDMI1: Persist EDID Allm Bit: %d", allmSupport); break;
+                DSLOG_INFO("Port HDMI1: Persist EDID Allm Bit: %d", allmSupport); break;
             case dsHDMI_IN_PORT_2:
                 device::HostPersistence::getInstance().persistHostProperty("HDMI2.edidallmEnable", allmSupport ? "TRUE" : "FALSE");
-                LOGINFO("Port HDMI2: Persist EDID Allm Bit: %d", allmSupport); break;
+                DSLOG_INFO("Port HDMI2: Persist EDID Allm Bit: %d", allmSupport); break;
             case dsHDMI_IN_PORT_3:
                 device::HostPersistence::getInstance().persistHostProperty("HDMI3.edidallmEnable", allmSupport ? "TRUE" : "FALSE");
-                LOGINFO("Port HDMI3: Persist EDID Allm Bit: %d", allmSupport); break;
+                DSLOG_INFO("Port HDMI3: Persist EDID Allm Bit: %d", allmSupport); break;
             default:
-                LOGWARN("Invalid HDMI port %d for ALLM persistence update", iHdmiPort); break;
+                DSLOG_WARN("Invalid HDMI port %d for ALLM persistence update", iHdmiPort); break;
         }
     }
 
 public:
     dHdmiInAIDLImpl()
     {
-        LOGINFO("dHdmiInAIDLImpl Constructor");
+        DSLOG_INFO("dHdmiInAIDLImpl Constructor");
         InitialiseHAL();
     }
 
     virtual ~dHdmiInAIDLImpl()
     {
-        LOGINFO("dHdmiInAIDLImpl Destructor");
+        DSLOG_INFO("dHdmiInAIDLImpl Destructor");
         DeInitialiseHAL();
     }
 
@@ -888,17 +888,17 @@ public:
     {
         getDynamicAutoLatencyConfig();
         profileType = searchRdkProfile();
-        LOGINFO("profileType %d", profileType);
+        DSLOG_INFO("profileType %d", profileType);
 
         if (TV == profileType) {
             aidlHdmiInInit();
-            LOGINFO("dHdmiInAIDLImpl: AIDL init complete, %d ports found", m_aidlPortCount);
+            DSLOG_INFO("dHdmiInAIDLImpl: AIDL init complete, %d ports found", m_aidlPortCount);
         }
     }
 
     void DeInitialiseHAL() override
     {
-        LOGINFO("profileType %d", profileType);
+        DSLOG_INFO("profileType %d", profileType);
         if (TV == profileType) {
             aidlTerm();
         }
@@ -907,7 +907,7 @@ public:
     void setAllCallbacks(const CallbackBundle bundle) override
     {
         ENTRY_LOG;
-        LOGINFO("setAllCallbacks: profileType %d", profileType);
+        DSLOG_INFO("setAllCallbacks: profileType %d", profileType);
         if (!m_hdmiInInitialized && !m_aidlPorts.empty()) {
             if (TV == profileType) {
                 // AIDL listeners registered in aidlHdmiInInit; just store the callbacks.
@@ -953,7 +953,7 @@ public:
                         std::string val = device::HostPersistence::getInstance().getDefaultProperty(key);
                         m_edidversion[port] = static_cast<tv_hdmi_edid_version_t>(atoi(val.c_str()));
                     } catch (...) {
-                        LOGERR("Port %s: Exception getting EDID version, defaulting to 2.0", key.c_str());
+                        DSLOG_ERR("Port %s: Exception getting EDID version, defaulting to 2.0", key.c_str());
                         m_edidversion[port] = HDMI_EDID_VER_20;
                     }
                 }
@@ -963,23 +963,23 @@ public:
             loadEdidVer(dsHDMI_IN_PORT_2, "HDMI2.edidversion");
 
             for (itr = 0; itr < dsHDMI_IN_PORT_MAX; itr++) {
-                LOGINFO("Port HDMI%d: VRR capability: %d", itr, m_hdmiPortVrrCaps[itr]);
+                DSLOG_INFO("Port HDMI%d: VRR capability: %d", itr, m_hdmiPortVrrCaps[itr]);
             }
             for (itr = 0; itr < dsHDMI_IN_PORT_MAX; itr++) {
                 if (SetHDMIEdidVersion(static_cast<HDMIInPort>(itr), static_cast<HDMIInEdidVersion>(m_edidversion[itr])) == WPEFramework::Core::ERROR_NONE) {
-                    LOGINFO("Port HDMI%d: Initialized EDID Version: %d", itr, m_edidversion[itr]);
+                    DSLOG_INFO("Port HDMI%d: Initialized EDID Version: %d", itr, m_edidversion[itr]);
                 }
             }
             m_hdmiInInitialized = true;
         }
-        LOGINFO("Set Callbacks");
+        DSLOG_INFO("Set Callbacks");
     }
 
     virtual uint32_t GetHDMIInNumberOfInputs(int32_t& count) override
     {
         if (!ensureAidlService()) return WPEFramework::Core::ERROR_UNAVAILABLE;
         count = static_cast<int32_t>(m_aidlPortCount);
-        LOGINFO("GetHDMIInNumberOfInputs: count=%d (AIDL)", count);
+        DSLOG_INFO("GetHDMIInNumberOfInputs: count=%d (AIDL)", count);
         return WPEFramework::Core::ERROR_NONE;
     }
 
@@ -999,7 +999,7 @@ public:
             }
         }
         portConnectionStatus = WPEFramework::Core::Service<WPEFramework::RPC::IteratorType<IHDMIInPortConnectionStatusIterator>>::Create<IHDMIInPortConnectionStatusIterator>(portStatuses);
-        LOGINFO("GetHDMIInStatus (AIDL): activePort=%d isPresented=%s", m_aidlActivePort, hdmiStatus.isPresented ? "true" : "false");
+        DSLOG_INFO("GetHDMIInStatus (AIDL): activePort=%d isPresented=%s", m_aidlActivePort, hdmiStatus.isPresented ? "true" : "false");
         return WPEFramework::Core::ERROR_NONE;
     }
 
@@ -1026,7 +1026,7 @@ public:
             }
 
             if (activeController && !activeController->stop().isOk()) {
-                LOGERR("SelectHDMIInPort: stop failed while deselecting active port %d", activePort);
+                DSLOG_ERR("SelectHDMIInPort: stop failed while deselecting active port %d", activePort);
                 return WPEFramework::Core::ERROR_GENERAL;
             }
 
@@ -1036,7 +1036,7 @@ public:
                 if (active != m_aidlPorts.end()) active->second.isStarted = false;
                 if (m_aidlActivePort == activePort) m_aidlActivePort = -1;
             }
-            LOGINFO("SelectHDMIInPort: deselected active port %d; no replacement port started", activePort);
+            DSLOG_INFO("SelectHDMIInPort: deselected active port %d; no replacement port started", activePort);
             return WPEFramework::Core::ERROR_NONE;
         }
 
@@ -1044,7 +1044,7 @@ public:
             std::lock_guard<std::mutex> lk(m_aidlMutex);
             auto selected = m_aidlPorts.find(portId);
             if (selected == m_aidlPorts.end() || !selected->second.hdmiInput) {
-                LOGERR("SelectHDMIInPort: invalid port %d", portId);
+                DSLOG_ERR("SelectHDMIInPort: invalid port %d", portId);
                 return WPEFramework::Core::ERROR_GENERAL;
             }
 
@@ -1061,12 +1061,12 @@ public:
         }
 
         if (activeController && !activeController->stop().isOk()) {
-            LOGERR("SelectHDMIInPort: stop failed for active port %d", activePort);
+            DSLOG_ERR("SelectHDMIInPort: stop failed for active port %d", activePort);
             return WPEFramework::Core::ERROR_GENERAL;
         }
 
         if (!alreadyStarted && !controller->start().isOk()) {
-            LOGERR("SelectHDMIInPort: start failed for port %d", portId);
+            DSLOG_ERR("SelectHDMIInPort: start failed for port %d", portId);
             return WPEFramework::Core::ERROR_GENERAL;
         }
 
@@ -1081,20 +1081,20 @@ public:
             m_aidlActivePort = portId;
         }
 
-        LOGINFO("SelectHDMIInPort: port=%d selected; requestAudioMix=%s, topMostPlane=%s, videoPlaneType=%d are not supported by the HDMI-input AIDL interface",
+        DSLOG_INFO("SelectHDMIInPort: port=%d selected; requestAudioMix=%s, topMostPlane=%s, videoPlaneType=%d are not supported by the HDMI-input AIDL interface",
                 portId, requestAudioMix ? "true" : "false", topMostPlane ? "true" : "false", videoPlaneType);
         return WPEFramework::Core::ERROR_NONE;
     }
 
     uint32_t ScaleHDMIInVideo(const HDMIInVideoRectangle videoPosition) override
     {
-        LOGINFO("ScaleHDMIInVideo: on hold pending PlaneControl (AIDL)");
+        DSLOG_INFO("ScaleHDMIInVideo: on hold pending PlaneControl (AIDL)");
         return WPEFramework::Core::ERROR_UNAVAILABLE;
     }
 
     uint32_t SelectHDMIZoomMode(const HDMIInVideoZoom zoomMode) override
     {
-        LOGINFO("SelectHDMIZoomMode: on hold pending PlaneControl (AIDL)");
+        DSLOG_INFO("SelectHDMIZoomMode: on hold pending PlaneControl (AIDL)");
         return WPEFramework::Core::ERROR_UNAVAILABLE;
     }
 
@@ -1135,7 +1135,7 @@ public:
                 default:                             features.emplace_back("VRR_AMD_FREESYNC"); break;
             }
         }
-        LOGINFO("GetSupportedGameFeaturesList count=%zu (AIDL)", features.size());
+        DSLOG_INFO("GetSupportedGameFeaturesList count=%zu (AIDL)", features.size());
 
         std::vector<DeviceSettingsHDMIIn::HDMIInGameFeatureList> featuresList;
         for (const auto& f : features) {
@@ -1152,7 +1152,7 @@ public:
     {
         audioLatency = 0;
         videoLatency = 0;
-        LOGINFO("GetHDMIInAVLatency: returning 0/0 (AIDL, no PlaneControl)");
+        DSLOG_INFO("GetHDMIInAVLatency: returning 0/0 (AIDL, no PlaneControl)");
         return WPEFramework::Core::ERROR_NONE;
     }
 
@@ -1170,7 +1170,7 @@ public:
         Capabilities caps;
         if (!hi->getCapabilities(&caps).isOk()) return WPEFramework::Core::ERROR_GENERAL;
         allmStatus = caps.supportsALLM;
-        LOGINFO("GetHDMIInAllmStatus: port=%d, allmStatus=%s (AIDL)", (int)hdmiPort, allmStatus ? "true" : "false");
+        DSLOG_INFO("GetHDMIInAllmStatus: port=%d, allmStatus=%s (AIDL)", (int)hdmiPort, allmStatus ? "true" : "false");
         return WPEFramework::Core::ERROR_NONE;
     }
 
@@ -1179,7 +1179,7 @@ public:
         dsHdmiInPort_t hdmiPort = static_cast<dsHdmiInPort_t>(port);
         if (hdmiPort < dsHDMI_IN_PORT_MAX) {
             allmSupport = m_edidallmsupport[hdmiPort];
-            LOGINFO("GetHDMIInEdid2AllmSupport: port=%d, allmSupport=%s", (int)hdmiPort, allmSupport ? "true" : "false");
+            DSLOG_INFO("GetHDMIInEdid2AllmSupport: port=%d, allmSupport=%s", (int)hdmiPort, allmSupport ? "true" : "false");
             return WPEFramework::Core::ERROR_NONE;
         }
         return WPEFramework::Core::ERROR_GENERAL;
@@ -1189,14 +1189,14 @@ public:
     {
         dsHdmiInPort_t hdmiPort = static_cast<dsHdmiInPort_t>(port);
         if (hdmiPort < dsHDMI_IN_PORT_MAX) {
-            LOGINFO("SetHDMIInEdid2AllmSupport: checking edidversion of port %d: %d", (int)hdmiPort, m_edidversion[hdmiPort]);
+            DSLOG_INFO("SetHDMIInEdid2AllmSupport: checking edidversion of port %d: %d", (int)hdmiPort, m_edidversion[hdmiPort]);
             if (m_edidversion[hdmiPort] == HDMI_EDID_VER_20) {
                 updateEdidAllmBitValuesInPersistence(hdmiPort, allmSupport);
                 m_edidallmsupport[hdmiPort] = allmSupport;
-                LOGINFO("SetHDMIInEdid2AllmSupport: port=%d, allmSupport=%s (AIDL)", (int)hdmiPort, allmSupport ? "true" : "false");
+                DSLOG_INFO("SetHDMIInEdid2AllmSupport: port=%d, allmSupport=%s (AIDL)", (int)hdmiPort, allmSupport ? "true" : "false");
                 return WPEFramework::Core::ERROR_NONE;
             }
-            LOGINFO("EDID version is not 2.0, cannot set ALLM support for port %d", (int)hdmiPort);
+            DSLOG_INFO("EDID version is not 2.0, cannot set ALLM support for port %d", (int)hdmiPort);
             return WPEFramework::Core::ERROR_UNAVAILABLE;
         }
         return WPEFramework::Core::ERROR_GENERAL;
@@ -1216,12 +1216,12 @@ public:
         std::vector<uint8_t> edidVec;
         bool ok = false;
         if (!hi->getEDID(&edidVec, &ok).isOk() || !ok || edidVec.empty()) {
-            LOGERR("GetEdidBytes: getEDID failed for port %d", (int)hdmiPort);
+            DSLOG_ERR("GetEdidBytes: getEDID failed for port %d", (int)hdmiPort);
             return WPEFramework::Core::ERROR_GENERAL;
         }
         int copyLen = std::min((int)edidVec.size(), (int)edidBytesLength);
         memcpy(edidBytes, edidVec.data(), copyLen);
-        LOGINFO("GetEdidBytes: port=%d, len=%d (AIDL)", (int)hdmiPort, copyLen);
+        DSLOG_INFO("GetEdidBytes: port=%d, len=%d (AIDL)", (int)hdmiPort, copyLen);
         return WPEFramework::Core::ERROR_NONE;
     }
 
@@ -1241,7 +1241,7 @@ public:
 
         if (spdVec.empty()) {
             if (!hi->getSPDInfoFrame(&spdVec).isOk() || spdVec.empty()) {
-                LOGERR("GetHDMISPDInformation: getSPDInfoFrame failed for port %d", (int)hdmiPort);
+                DSLOG_ERR("GetHDMISPDInformation: getSPDInfoFrame failed for port %d", (int)hdmiPort);
                 return WPEFramework::Core::ERROR_GENERAL;
             }
             std::lock_guard<std::mutex> lk(m_aidlMutex);
@@ -1253,7 +1253,7 @@ public:
         memset(spdBytes, 0, spdBytesLength);
         size_t copyLen = std::min(spdVec.size(), (size_t)spdBytesLength);
         memcpy(spdBytes, spdVec.data(), copyLen);
-        LOGINFO("GetHDMISPDInformation: port=%d, len=%zu (AIDL)", (int)hdmiPort, copyLen);
+        DSLOG_INFO("GetHDMISPDInformation: port=%d, len=%zu (AIDL)", (int)hdmiPort, copyLen);
         return WPEFramework::Core::ERROR_NONE;
     }
 
@@ -1273,7 +1273,7 @@ public:
         if (!hi->getEDID(&edidVec, &ok).isOk() || !ok || edidVec.size() < 128)
             return WPEFramework::Core::ERROR_GENERAL;
         edidVersion = static_cast<HDMIInEdidVersion>(aidlGetEdidVersion(edidVec));
-        LOGINFO("GetHDMIEdidVersion: port=%d, version=%d (AIDL)", (int)hdmiPort, (int)edidVersion);
+        DSLOG_INFO("GetHDMIEdidVersion: port=%d, version=%d (AIDL)", (int)hdmiPort, (int)edidVersion);
         return WPEFramework::Core::ERROR_NONE;
     }
 
@@ -1281,16 +1281,16 @@ public:
     {
         dsHdmiInPort_t hdmiPort    = static_cast<dsHdmiInPort_t>(port);
         tv_hdmi_edid_version_t ver = static_cast<tv_hdmi_edid_version_t>(edidVersion);
-        LOGINFO("SetHDMIEdidVersion: requested port=%d, EDID version=%d", (int)hdmiPort, (int)ver);
+        DSLOG_INFO("SetHDMIEdidVersion: requested port=%d, EDID version=%d", (int)hdmiPort, (int)ver);
 
         if (!ensureAidlService()) {
-            LOGERR("SetHDMIEdidVersion: AIDL service unavailable for port=%d, version=%d", (int)hdmiPort, (int)ver);
+            DSLOG_ERR("SetHDMIEdidVersion: AIDL service unavailable for port=%d, version=%d", (int)hdmiPort, (int)ver);
             return WPEFramework::Core::ERROR_UNAVAILABLE;
         }
 
         HDMIVersion aidlVersion;
         if (!aidlMapEdidVersion(ver, &aidlVersion)) {
-            LOGERR("SetHDMIEdidVersion: unsupported legacy EDID version=%d for port=%d", (int)ver, (int)hdmiPort);
+            DSLOG_ERR("SetHDMIEdidVersion: unsupported legacy EDID version=%d for port=%d", (int)ver, (int)hdmiPort);
             return WPEFramework::Core::ERROR_INVALID_PARAMETER;
         }
 
@@ -1300,7 +1300,7 @@ public:
             std::lock_guard<std::mutex> lk(m_aidlMutex);
             auto it = m_aidlPorts.find((int)hdmiPort);
             if (it == m_aidlPorts.end() || !it->second.hdmiInput || !it->second.controller) {
-                LOGERR("SetHDMIEdidVersion: missing HDMI input or controller for port=%d", (int)hdmiPort);
+                DSLOG_ERR("SetHDMIEdidVersion: missing HDMI input or controller for port=%d", (int)hdmiPort);
                 return WPEFramework::Core::ERROR_GENERAL;
             }
             hi   = it->second.hdmiInput;
@@ -1309,11 +1309,11 @@ public:
         Capabilities caps;
         const bool capabilitiesOk = hi->getCapabilities(&caps).isOk();
         if (!capabilitiesOk) {
-            LOGERR("SetHDMIEdidVersion: getCapabilities failed for port=%d, requested version=%d", (int)hdmiPort, (int)ver);
+            DSLOG_ERR("SetHDMIEdidVersion: getCapabilities failed for port=%d, requested version=%d", (int)hdmiPort, (int)ver);
             return WPEFramework::Core::ERROR_GENERAL;
         }
         if (!aidlEdidVersionSupported(caps, aidlVersion)) {
-            LOGERR("SetHDMIEdidVersion: EDID version=%d is not supported by port=%d", (int)ver, (int)hdmiPort);
+            DSLOG_ERR("SetHDMIEdidVersion: EDID version=%d is not supported by port=%d", (int)ver, (int)hdmiPort);
             return WPEFramework::Core::ERROR_UNAVAILABLE;
         }
 
@@ -1321,14 +1321,14 @@ public:
         bool ok = false;
         const bool defaultEdidCallOk = hi->getDefaultEDID(aidlVersion, &edidVec, &ok).isOk();
         if (!defaultEdidCallOk || !ok || edidVec.size() < 128) {
-            LOGERR("SetHDMIEdidVersion: getDefaultEDID failed for port=%d, version=%d (callOk=%s, resultOk=%s, size=%zu)",
+            DSLOG_ERR("SetHDMIEdidVersion: getDefaultEDID failed for port=%d, version=%d (callOk=%s, resultOk=%s, size=%zu)",
                    (int)hdmiPort, (int)ver, defaultEdidCallOk ? "true" : "false", ok ? "true" : "false", edidVec.size());
             return WPEFramework::Core::ERROR_GENERAL;
         }
         ok = false;
         const bool setEdidCallOk = ctrl->setEDID(edidVec, &ok).isOk();
         if (!setEdidCallOk || !ok) {
-            LOGERR("SetHDMIEdidVersion: setEDID failed for port=%d, version=%d (callOk=%s, resultOk=%s, size=%zu)",
+            DSLOG_ERR("SetHDMIEdidVersion: setEDID failed for port=%d, version=%d (callOk=%s, resultOk=%s, size=%zu)",
                    (int)hdmiPort, (int)ver, setEdidCallOk ? "true" : "false", ok ? "true" : "false", edidVec.size());
             return WPEFramework::Core::ERROR_GENERAL;
         }
@@ -1339,12 +1339,12 @@ public:
             device::HostPersistence::getInstance().persistHostProperty(key, std::to_string(static_cast<int>(ver)));
             m_edidversion[port_no] = ver;
             if (ver < HDMI_EDID_VER_20) {
-                LOGINFO("EDID version for port %d is less than 2.0, disabling ALLM support", port_no);
+                DSLOG_INFO("EDID version for port %d is less than 2.0, disabling ALLM support", port_no);
                 m_edidallmsupport[port_no] = false;
                 device::HostPersistence::getInstance().persistHostProperty("HDMI" + std::to_string(port_no) + ".edidallmsupport", "false");
             }
         }
-        LOGINFO("SetHDMIEdidVersion: port=%d, version=%d (AIDL)", (int)hdmiPort, ver);
+        DSLOG_INFO("SetHDMIEdidVersion: port=%d, version=%d (AIDL)", (int)hdmiPort, ver);
         return WPEFramework::Core::ERROR_NONE;
     }
 
@@ -1367,7 +1367,7 @@ public:
         videoPortResolution.stereoScopicMode = static_cast<HDMIInVideoStereoScopicMode>(dsRes.stereoScopicMode);
         videoPortResolution.frameRate        = static_cast<HDMIInVideoFrameRate>(dsRes.frameRate);
         videoPortResolution.interlaced       = dsRes.interlaced;
-        LOGINFO("GetHDMIVideoMode (AIDL): VIC=%d", vic);
+        DSLOG_INFO("GetHDMIVideoMode (AIDL): VIC=%d", vic);
         return WPEFramework::Core::ERROR_NONE;
     }
 
@@ -1392,7 +1392,7 @@ public:
                 capversion = HDMI_COMPATIBILITY_VERSION_20;
         }
         capabilityVersion = static_cast<HDMIInCapabilityVersion>(capversion);
-        LOGINFO("GetHDMIVersion: port=%d, version=%d (AIDL)", (int)hdmiPort, capversion);
+        DSLOG_INFO("GetHDMIVersion: port=%d, version=%d (AIDL)", (int)hdmiPort, capversion);
         return WPEFramework::Core::ERROR_NONE;
     }
 
@@ -1400,14 +1400,14 @@ public:
     {
         dsHdmiInPort_t hdmiPort = static_cast<dsHdmiInPort_t>(port);
         if (hdmiPort < dsHDMI_IN_PORT_MAX) {
-            LOGINFO("SetVRRSupport: checking edidversion of port %d: %d", (int)hdmiPort, m_edidversion[hdmiPort]);
+            DSLOG_INFO("SetVRRSupport: checking edidversion of port %d: %d", (int)hdmiPort, m_edidversion[hdmiPort]);
             if (m_edidversion[hdmiPort] == HDMI_EDID_VER_20) {
                 updateVRRBitValuesInPersistence(hdmiPort, vrrSupport);
                 m_vrrsupport[hdmiPort] = vrrSupport;
-                LOGINFO("SetVRRSupport: port=%d, vrrSupport=%d (AIDL)", (int)hdmiPort, vrrSupport);
+                DSLOG_INFO("SetVRRSupport: port=%d, vrrSupport=%d (AIDL)", (int)hdmiPort, vrrSupport);
                 return WPEFramework::Core::ERROR_NONE;
             }
-            LOGINFO("EDID version is not 2.0, cannot set VRR support for port %d", (int)hdmiPort);
+            DSLOG_INFO("EDID version is not 2.0, cannot set VRR support for port %d", (int)hdmiPort);
             return WPEFramework::Core::ERROR_UNAVAILABLE;
         }
         return WPEFramework::Core::ERROR_GENERAL;
@@ -1418,7 +1418,7 @@ public:
         dsHdmiInPort_t hdmiPort = static_cast<dsHdmiInPort_t>(port);
         if (hdmiPort < dsHDMI_IN_PORT_MAX) {
             vrrSupport = m_vrrsupport[hdmiPort];
-            LOGINFO("GetVRRSupport: port=%d, vrrSupport=%d", (int)hdmiPort, vrrSupport);
+            DSLOG_INFO("GetVRRSupport: port=%d, vrrSupport=%d", (int)hdmiPort, vrrSupport);
             return WPEFramework::Core::ERROR_NONE;
         }
         return WPEFramework::Core::ERROR_GENERAL;
@@ -1437,13 +1437,13 @@ public:
             : dsVRR_NONE;
         vrrStatus.vrrType = static_cast<HDMIInVRRType>(vrrType);
         vrrStatus.vrrFreeSyncFramerateHz = ctx.vrrActive ? ctx.vrrFrameRate : 0.0;
-        LOGINFO("GetVRRStatus: port=%d, vrrType=%d (AIDL)", (int)hdmiPort, vrrType);
+        DSLOG_INFO("GetVRRStatus: port=%d, vrrType=%d (AIDL)", (int)hdmiPort, vrrType);
         return WPEFramework::Core::ERROR_NONE;
     }
 
     static bool IsHdmiInAIDLServiceAvailable()
     {
-        LOGINFO("dHdmiInAIDLImpl: Checking AIDL HAL availability");
+        DSLOG_INFO("dHdmiInAIDLImpl: Checking AIDL HAL availability");
         try {
             ProcessState::self()->startThreadPool();
             sp<android::IServiceManager> sm = defaultServiceManager();
@@ -1452,10 +1452,10 @@ public:
             sp<android::IBinder> binder = sm->checkService(
                 String16(IHDMIInputManager::serviceName().c_str()));
             bool available = (binder != nullptr);
-            LOGINFO("dHdmiInAIDLImpl: AIDL service %s", available ? "available" : "not available");
+            DSLOG_INFO("dHdmiInAIDLImpl: AIDL service %s", available ? "available" : "not available");
             return available;
         } catch (...) {
-            LOGERR("dHdmiInAIDLImpl: Exception checking AIDL availability");
+            DSLOG_ERR("dHdmiInAIDLImpl: Exception checking AIDL availability");
             return false;
         }
     }
