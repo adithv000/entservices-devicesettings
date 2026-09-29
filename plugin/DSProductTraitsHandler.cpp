@@ -455,22 +455,7 @@ bool UXControllerTv::ApplyPostRebootConfig(PowerState targetState,
     SyncPowerLedWithPowerState(targetState);
 #endif
     if ((WPEFramework::Exchange::IPowerManager::POWER_STATE_ON == lastKnownState) && (WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY == targetState)) {
-        if (true == DoForceDisplayOnPostReboot()) {
-            SyncDisplayPortsWithPowerState(WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
-        } else {
-            reboot_type_t isHardReboot = GetRebootType();
-            switch (isHardReboot) {
-                case reboot_type_t::HARD:
-                    SyncDisplayPortsWithPowerState(WPEFramework::Exchange::IPowerManager::POWER_STATE_STANDBY);
-                    break;
-                case reboot_type_t::SOFT:
-                    SyncDisplayPortsWithPowerState(WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
-                    break;
-                default:
-                    ScheduleRebootReasonCheck(this);
-                    break;
-            }
-        }
+        SyncDisplayPortsWithPowerState(WPEFramework::Exchange::IPowerManager::POWER_STATE_ON);
     } else {
         SyncDisplayPortsWithPowerState(targetState);
     }
