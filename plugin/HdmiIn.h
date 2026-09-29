@@ -32,10 +32,10 @@
 #include <interfaces/IDeviceSettingsHDMIIn.h>
 #include "DeviceSettingsTypes.h"
 #include "hal/dHdmiInImpl.h"
+#include "hal/dHdmiInAIDLImpl.h"
 
 class HdmiIn {
     using IPlatform = hal::dHdmiIn::IPlatform;
-    using DefaultImpl = dHdmiInImpl;
 
     std::shared_ptr<IPlatform> _platform;
 public:
@@ -56,7 +56,11 @@ public:
 
     void Platform_init();
     /** Deferred HAL init — called from DeviceSettingsImp::Configure() */
-    void InitialiseHAL() { std::static_pointer_cast<DefaultImpl>(_platform)->InitialiseHAL(); }
+    void InitialiseHAL() {
+        if (_platform) {
+            _platform->InitialiseHAL();
+        }
+    }
 
     uint32_t GetHDMIInNumberOfInputs(int32_t &count);
     uint32_t GetHDMIInStatus(HDMIInStatus &hdmiStatus, IHDMIInPortConnectionStatusIterator*& portConnectionStatus);
@@ -89,12 +93,37 @@ private:
     INotification& _parent;
 
 public:
-    template <typename IMPL = DefaultImpl, typename... Args>
-    static HdmiIn Create(INotification& parent, Args&&... args)
+    /**
+     * @brief Factory method with automatic HAL implementation selection
+     *
+     * This method intelligently selects between AIDL HAL and RDKV HAL implementations:
+     * - If AIDL HAL services are available on the platform, uses dHdmiInAIDLImpl
+     * - Otherwise, falls back to dHdmiInImpl (legacy RDKV HAL)
+     *
+     * This provides transparent support for both HAL implementations without
+     * requiring caller code changes.
+     *
+     * @param parent Reference to INotification handler for events
+     * @return HdmiIn instance with appropriate HAL backend
+     */
+    static HdmiIn Create(INotification& parent)
     {
         ENTRY_LOG;
-        static_assert(std::is_base_of<IPlatform, IMPL>::value, "Impl must derive from hal::dHdmiIn::IPlatform");
-        auto impl = std::shared_ptr<IMPL>(new IMPL(std::forward<Args>(args)...));
+
+        LOGINFO("HdmiIn::Create - Detecting available HAL implementation");
+
+        std::shared_ptr<IPlatform> impl;
+
+        // Try to use AIDL implementation if available
+        if (dHdmiInAIDLImpl::IsHdmiInAIDLServiceAvailable()) {
+            LOGINFO("HdmiIn::Create - AIDL HAL is available, using dHdmiInAIDLImpl");
+            impl = std::make_shared<dHdmiInAIDLImpl>();
+        } else {
+            // Fall back to RDKV implementation
+            LOGINFO("HdmiIn::Create - AIDL HAL not available, using legacy dHdmiInImpl (RDKV)");
+            impl = std::make_shared<dHdmiInImpl>();
+        }
+
         ASSERT(impl != nullptr);
         EXIT_LOG;
         return HdmiIn(parent, std::move(impl));
