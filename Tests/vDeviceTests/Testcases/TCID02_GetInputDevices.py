@@ -30,10 +30,23 @@
 
 import time
 import os
+from urllib.parse import urlsplit
 
 from utils import send_curl_command, log_info, log_success, log_error, log_warning
 import AVInput_Curl as AVInputApis
 from AVInput_Helpers import parse_input_devices
+
+
+def _is_valid_locator(locator, device_id):
+    if not isinstance(locator, str):
+        return False
+    parsed = urlsplit(locator)
+    path_parts = parsed.path.rstrip("/").split("/")
+    return (
+        parsed.scheme.lower() == "hdmiin"
+        and bool(parsed.netloc)
+        and path_parts[-2:] == ["deviceid", str(device_id)]
+    )
 
 
 def run_test():
@@ -58,8 +71,8 @@ def run_test():
         if not isinstance(dev.get("connected"), bool):
             log_error("TCID02_GetInputDevices Failed ❌ (connected flag not boolean)")
             return False
-        if "hdmiin" not in str(dev.get("locator")):
-            log_error("TCID02_GetInputDevices Failed ❌ (locator not an hdmiin URL)")
+        if not _is_valid_locator(dev.get("locator"), dev.get("id")):
+            log_error("TCID02_GetInputDevices Failed ❌ (locator not hdmiin://.../deviceid/<id>)")
             return False
 
     log_success(f"✅ {len(devices)} HDMI device(s) reported")

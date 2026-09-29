@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID28_StableSignalState.py
+ * @file TCID27_StableSignalState.py
  * @brief Reproduces HDMI signal-change notifications with vComponent stimuli.
  *
- * @testcase TCID28_StableSignalState
+ * @testcase TCID27_StableSignalState
  * @details Registers for onSignalChanged, presents HDMI port 0, and injects a
  *          sequence of distinct signal states through the HDMI Input
  *          vComponent. Each resulting notification payload is captured and
@@ -26,10 +26,10 @@ import os
 import time
 
 import AVInput_Curl as AVInputApis
+from AVInput_Helpers import result_success
 from utils import (
     HDMIIN_CMD_BASE,
     JsonRpcEventListener,
-    is_ok,
     log_error,
     log_info,
     log_success,
@@ -83,11 +83,11 @@ def run_test():
     listener = JsonRpcEventListener(
         AVInputApis.CALLSIGN,
         "onSignalChanged",
-        "ID_TCID28_signal",
+        "ID_TCID27_signal",
         timeout=EVENT_TIMEOUT,
     )
     if not listener.connect():
-        log_error("TCID28_SignalStatusNotification Failed (event registration rejected)")
+        log_error("TCID27_StableSignalState Failed (event registration rejected)")
         return False
 
     try:
@@ -96,8 +96,8 @@ def run_test():
 
         start_response = send_curl_command(AVInputApis.start_input(PORT))
         log_warning(f"startInput response: {start_response}")
-        if not is_ok(start_response):
-            log_error("TCID28_StableSignalState Failed (startInput rejected)")
+        if not result_success(start_response):
+            log_error("TCID27_StableSignalState Failed (startInput rejected)")
             return False
         time.sleep(TRANSITION_DELAY)
 
@@ -106,7 +106,7 @@ def run_test():
         )
         log_warning(f"vComponent connection_status(connected=true): HTTP {http_code} {body}")
         if http_code != 200:
-            log_error("TCID28_StableSignalState Failed (connection rejected)")
+            log_error("TCID27_StableSignalState Failed (connection rejected)")
             return False
 
         transitions = (
@@ -123,7 +123,7 @@ def run_test():
             accepted = _post_locked_yaml() if use_yaml else _post_signal(state)
             if not accepted:
                 log_error(
-                    f"TCID28_SignalStatusNotification Failed ({state} injection rejected)"
+                    f"TCID27_StableSignalState Failed ({state} injection rejected)"
                 )
                 return False
             if not _expect_signal(listener, expected_status):

@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID26_VrrStatusUpdate.py
+ * @file TCID25_VrrStatusUpdate.py
  * @brief L3 AVInput vComponent-driven testcase.
  *
- * @testcase TCID26_VrrStatusUpdate
+ * @testcase TCID25_VrrStatusUpdate
  * @details Registers for gameFeatureStatusUpdate, reads getVRRSupport, injects
  *          a live VRR status change through the vComponent
  *          (HDMIInput_VRR_Status.yaml -> onVRRChanged in the HAL), captures the
@@ -63,7 +63,7 @@ from AVInput_Helpers import parse_vrr_support, parse_vrr_frame_rate
 
 PORT = 0
 CONNECTION_YAML = "HDMIInput_Connection_Status.yaml"
-SIGNAL_YAML = "HDMIInput_Signal_Status.yaml"
+SIGNAL_YAML = "HDMIInput_Signal_LOCKED_Status.yaml"
 VRR_YAML = "HDMIInput_VRR_Status.yaml"
 EVENT_TIMEOUT = float(os.environ.get("AVINPUT_EVENT_TIMEOUT", "8"))
 
@@ -123,40 +123,47 @@ def run_test():
     listener = JsonRpcEventListener(
         AVInputApis.CALLSIGN,
         "gameFeatureStatusUpdate",
-        "ID_TCID26_vrr_status",
+        "ID_TCID25_vrr_status",
         timeout=EVENT_TIMEOUT,
     )
     if not listener.connect():
-        log_error("TCID26_VrrStatusUpdate Failed (event registration rejected)")
+        log_error("TCID25_VrrStatusUpdate Failed (event registration rejected)")
         return False
 
     try:
-        log_info("Step 1: startInput on port 0")
-        send_curl_command(AVInputApis.start_input(PORT))
+        start_response = send_curl_command(AVInputApis.start_input(PORT))
+        log_warning(f"startInput response: {start_response}")
+        if not is_ok(start_response):
+            log_error("TCID25_VrrStatusUpdate Failed ❌ (startInput rejected)")
+            return False
         time.sleep(1)
 
         # Step 2: present the port (connection + LOCKED signal) so the vComponent
         # actually delivers onVRRChanged for the live VRR state.
         log_info(f"Step 2: present source via {CONNECTION_YAML} + {SIGNAL_YAML}")
-        _post_file(CONNECTION_YAML)
+        if not _post_file(CONNECTION_YAML):
+            log_error("TCID25_VrrStatusUpdate Failed ❌ (connection_status YAML rejected)")
+            return False
         time.sleep(1)
-        _post_file(SIGNAL_YAML)
+        if not _post_file(SIGNAL_YAML):
+            log_error("TCID25_VrrStatusUpdate Failed ❌ (signal_status YAML rejected)")
+            return False
         time.sleep(1)
 
         # Step 3: read getVRRSupport BEFORE the injection.
         before_support = _read_vrr_support()
         log_info(f"getVRRSupport BEFORE injection = {before_support}")
         if not isinstance(before_support, bool):
-            log_error("TCID26_VrrStatusUpdate Failed ❌ (getVRRSupport not boolean before injection)")
+            log_error("TCID25_VrrStatusUpdate Failed ❌ (getVRRSupport not boolean before injection)")
             return False
 
         # Step 4: inject the live VRR status (vrrActive=true, frameRate=120).
         log_info(f"Step 4: injecting vrr_status via {VRR_YAML} (vrrActive=true, frameRate=120)")
         if not _post_vrr_file():
-            log_error("TCID26_VrrStatusUpdate Failed ❌ (vrr_status YAML rejected)")
+            log_error("TCID25_VrrStatusUpdate Failed ❌ (vrr_status YAML rejected)")
             return False
         if not _expect_vrr_enabled(listener):
-            log_error("TCID26_VrrStatusUpdate Failed ❌ (VRR event not captured)")
+            log_error("TCID25_VrrStatusUpdate Failed ❌ (VRR event not captured)")
             return False
 
         # Step 5: read getVRRSupport AGAIN and print it. This is EXPECTED to stay
@@ -166,7 +173,7 @@ def run_test():
         after_support = _read_vrr_support()
         log_info(f"getVRRSupport AFTER injection = {after_support}")
         if not isinstance(after_support, bool):
-            log_error("TCID26_VrrStatusUpdate Failed ❌ (getVRRSupport not boolean after injection)")
+            log_error("TCID25_VrrStatusUpdate Failed ❌ (getVRRSupport not boolean after injection)")
             return False
         if after_support == before_support:
             log_info(
@@ -179,16 +186,15 @@ def run_test():
         frame_rate = _read_vrr_frame_rate()
         log_info(f"getVRRFrameRate AFTER injection = {frame_rate}")
         if frame_rate is None:
-            log_error("TCID26_VrrStatusUpdate Failed ❌ (getVRRFrameRate not numeric after injection)")
+            log_error("TCID25_VrrStatusUpdate Failed ❌ (getVRRFrameRate not numeric after injection)")
             return False
-        if frame_rate > 0.0:
-            log_success(f"✅ Live VRR observed after injection: currentVRRVideoFrameRate = {frame_rate}")
-        else:
-            log_warning(
-                "getVRRFrameRate is 0 after injection: the vDevice did not present the port "
-                "(m_aidlActivePort stayed -1 / onVRRChanged not delivered), so the live VRR "
-                "state was not applied. Accepting injection acceptance + queryability."
-            )
+        if frame_rate != 120.0:
+             log_error(
+                 "TCID25_VrrStatusUpdate Failed ❌ "
+                 f"(expected live VRR frame rate 120.0, got {frame_rate})"
+             )
+             return False
+        log_success(f"✅ Live VRR observed after injection: currentVRRVideoFrameRate = {frame_rate}")
     finally:
         _post_vrr_inactive()
         send_vcomponent_payload("signal_status", {"port": PORT, "state": "NO_SIGNAL"})
@@ -197,7 +203,7 @@ def run_test():
         listener.close()
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID26_VrrStatusUpdate Passed ✅"
+    msg = "TCID25_VrrStatusUpdate Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:

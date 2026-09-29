@@ -436,7 +436,7 @@ def send_vcomponent_command(yaml_file_path):
             return 0, f"YAML file not found: {yaml_file_path}"
 
         cmd = [
-            "curl", "-sS", "-w", "\n%{http_code}",
+            "curl", "-sS", "--max-time", "5", "-w", "\n%{http_code}",
             "-X", "POST",
             "-H", "Content-Type: application/x-yaml",
             "--data-binary", f"@{yaml_file_path}",
@@ -531,7 +531,7 @@ def parse_result(curl_response):
 
 
 def is_ok(curl_response):
-    """Return True if a JSON-RPC response is valid and carries a 'result' (no 'error')."""
+    """Return True only when JSON-RPC and plugin-level success are both true."""
     if not curl_response or curl_response.startswith("< No response"):
         return False
     try:
@@ -540,7 +540,12 @@ def is_ok(curl_response):
         return False
     if not isinstance(body, dict):
         return False
-    return "result" in body and "error" not in body
+    result = body.get("result")
+    return (
+        "error" not in body
+        and isinstance(result, dict)
+        and result.get("success") is True
+    )
 
 
 def responded(curl_response):

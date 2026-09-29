@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID18_PresentationWindowWorkflow.py
+ * @file TCID17_PresentationWindowWorkflow.py
  * @brief L3 AVInput scenario testcase.
  *
- * @testcase TCID18_PresentationWindowWorkflow
+ * @testcase TCID17_PresentationWindowWorkflow
  * @details Scenario: a UI presents an HDMI source full-screen, shrinks it into a
  *          picture-in-picture tile, moves the tile, restores full-screen, then
  *          exits. Sequence:
@@ -55,7 +55,7 @@ def run_test():
         start_resp = send_curl_command(AVInputApis.start_input(PORT))
         log_warning(f"startInput response: {start_resp}")
         if not result_success(start_resp):
-            log_error("TCID18_PresentationWindowWorkflow Failed ❌ (startInput rejected)")
+            log_error("TCID17_PresentationWindowWorkflow Failed ❌ (startInput rejected)")
             return False
 
         for label, x, y, w, h in GEOMETRY_SEQUENCE:
@@ -63,7 +63,7 @@ def run_test():
             resp = send_curl_command(AVInputApis.set_video_rectangle(x, y, w, h))
             log_warning(f"setVideoRectangle response: {resp}")
             if not result_success(resp):
-                log_error(f"TCID18_PresentationWindowWorkflow Failed ❌ ({label} rejected)")
+                log_error(f"TCID17_PresentationWindowWorkflow Failed ❌ ({label} rejected)")
                 return False
             log_success(f"✅ {label} applied")
             time.sleep(1)
@@ -72,21 +72,21 @@ def run_test():
         stop_resp = send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
         log_warning(f"stopInput response: {stop_resp}")
         if not result_success(stop_resp):
-            log_error("TCID18_PresentationWindowWorkflow Failed ❌ (stopInput rejected)")
+            log_error("TCID17_PresentationWindowWorkflow Failed ❌ (stopInput rejected)")
             return False
 
         log_info("Step: setVideoRectangle after stop (must be handled gracefully)")
         post_resp = send_curl_command(AVInputApis.set_video_rectangle(0, 0, 1920, 1080))
         log_warning(f"setVideoRectangle (after stop) response: {post_resp}")
         if not responded(post_resp):
-            log_error("TCID18_PresentationWindowWorkflow Failed ❌ (no response after stop)")
+            log_error("TCID17_PresentationWindowWorkflow Failed ❌ (no response after stop)")
             return False
         log_success("✅ Post-stop rectangle call handled gracefully")
     finally:
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID18_PresentationWindowWorkflow Passed ✅"
+    msg = "TCID17_PresentationWindowWorkflow Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:

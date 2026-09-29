@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID15_GameModeProvisioning.py
+ * @file TCID14_GameModeProvisioning.py
  * @brief L3 AVInput scenario testcase.
  *
- * @testcase TCID15_GameModeProvisioning
+ * @testcase TCID14_GameModeProvisioning
  * @details Scenario: enabling "Game Mode" on an HDMI port from the settings UI.
  *          The middleware must advertise ALLM in the port EDID and then report
  *          the ALLM game-feature status. Sequence:
@@ -67,12 +67,12 @@ def run_test():
         ver_resp = send_curl_command(AVInputApis.set_edid_version(PORT, AVInputApis.EDID_VERSION_20))
         log_warning(f"setEdidVersion(HDMI2.0) response: {ver_resp}")
         if not result_success(ver_resp):
-            log_error("TCID15_GameModeProvisioning Failed ❌ (could not select EDID 2.0)")
+            log_error("TCID14_GameModeProvisioning Failed ❌ (could not select EDID 2.0)")
             return False
 
         log_info("Step 2: enable Game Mode (ALLM advertised in EDID)")
         if not _toggle_allm(True):
-            log_error("TCID15_GameModeProvisioning Failed ❌ (ALLM not enabled)")
+            log_error("TCID14_GameModeProvisioning Failed ❌ (ALLM not enabled)")
             return False
         log_success("✅ ALLM advertised in EDID")
 
@@ -82,13 +82,13 @@ def run_test():
         )
         log_warning(f"getGameFeatureStatus response: {status_resp}")
         if parse_game_feature_mode(status_resp) is None:
-            log_error("TCID15_GameModeProvisioning Failed ❌ (ALLM status not queryable)")
+            log_error("TCID14_GameModeProvisioning Failed ❌ (ALLM status not queryable)")
             return False
         log_success("✅ ALLM status queryable while Game Mode enabled")
 
         log_info("Step 4: disable Game Mode")
         if not _toggle_allm(False):
-            log_error("TCID15_GameModeProvisioning Failed ❌ (ALLM not disabled)")
+            log_error("TCID14_GameModeProvisioning Failed ❌ (ALLM not disabled)")
             return False
         log_success("✅ ALLM withdrawn from EDID")
 
@@ -98,7 +98,7 @@ def run_test():
         )
         log_warning(f"getGameFeatureStatus response: {status_off}")
         if parse_game_feature_mode(status_off) is None:
-            log_error("TCID15_GameModeProvisioning Failed ❌ (ALLM status unavailable when disabled)")
+            log_error("TCID14_GameModeProvisioning Failed ❌ (ALLM status unavailable when disabled)")
             return False
         log_success("✅ ALLM status queryable while Game Mode disabled")
     finally:
@@ -108,7 +108,7 @@ def run_test():
             send_curl_command(AVInputApis.set_edid_version(PORT, original_version))
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID15_GameModeProvisioning Passed ✅"
+    msg = "TCID14_GameModeProvisioning Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:

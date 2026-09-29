@@ -10,7 +10,7 @@ import os
 import time
 
 import AVInput_Curl as AVInputApis
-from AVInput_Helpers import get_device_connected
+from AVInput_Helpers import get_device_connected, result_success
 from utils import (
     JsonRpcEventListener,
     is_ok,
@@ -56,7 +56,7 @@ def _connect_listeners():
         event: JsonRpcEventListener(
             AVInputApis.CALLSIGN,
             event,
-            f"ID_TCID23_{event}",
+            f"ID_TCID22_{event}",
             timeout=EVENT_TIMEOUT,
         )
         for event in (
@@ -68,7 +68,7 @@ def _connect_listeners():
     }
     for event, listener in listeners.items():
         if not listener.connect():
-            log_error(f"TCID23_AidlEventCoverage Failed ({event} registration rejected)")
+            log_error(f"TCID22_AidlEventCoverage Failed ({event} registration rejected)")
             for registered_listener in listeners.values():
                 registered_listener.close()
             return None
@@ -91,7 +91,7 @@ def run_test():
 
     try:
         start_response = send_curl_command(AVInputApis.start_input(PORT))
-        if not is_ok(start_response):
+        if not result_success(start_response):
             log_error(f"Unable to start HDMI input before AIDL stimulus: {start_response}")
             return False
         if not _expect_event(
@@ -226,7 +226,7 @@ def run_test():
                 return False
 
         stop_response = send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
-        if not is_ok(stop_response):
+        if not result_success(stop_response):
             log_error(f"Unable to stop HDMI input before state readback: {stop_response}")
             return False
         if not _expect_event(
@@ -240,7 +240,7 @@ def run_test():
         ):
             return False
         start_response = send_curl_command(AVInputApis.start_input(PORT))
-        if not is_ok(start_response):
+        if not result_success(start_response):
             log_error(f"Unable to restart HDMI input for state readback: {start_response}")
             return False
         if not _expect_event(
@@ -270,5 +270,5 @@ def run_test():
         for listener in listeners.values():
             listener.close()
 
-    log_success("TCID23_AidlEventCoverage Passed")
+    log_success("TCID22_AidlEventCoverage Passed")
     return True

@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID24_ConnectionStatusUpdate.py
+ * @file TCID23_ConnectionStatusUpdate.py
  * @brief L3 AVInput vComponent-driven testcase.
  *
- * @testcase TCID24_ConnectionStatusUpdate
+ * @testcase TCID23_ConnectionStatusUpdate
  * @details Injects HDMI hot-plug connection changes through the vComponent
  *          (connection_status -> onConnectionStateChanged in the HAL, which
  *          updates the per-port connected flag surfaced by GetHDMIInStatus) and
@@ -149,11 +149,11 @@ def run_test():
     listener = JsonRpcEventListener(
         AVInputApis.CALLSIGN,
         "onDevicesChanged",
-        "ID_TCID24_devices",
+        "ID_TCID23_devices",
         timeout=EVENT_TIMEOUT,
     )
     if not listener.connect():
-        log_error("TCID24_ConnectionStatusUpdate Failed (event registration rejected)")
+        log_error("TCID23_ConnectionStatusUpdate Failed (event registration rejected)")
         return False
 
     ports = _resolve_ports()
@@ -163,7 +163,7 @@ def run_test():
         for port in ports:
             ok, failure = _verify_port(listener, port)
             if not ok:
-                log_error(f"TCID24_ConnectionStatusUpdate Failed ❌ ({failure})")
+                log_error(f"TCID23_ConnectionStatusUpdate Failed ❌ ({failure})")
                 return False
     finally:
         for port in ports:
@@ -172,7 +172,7 @@ def run_test():
         listener.close()
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID24_ConnectionStatusUpdate Passed ✅"
+    msg = "TCID23_ConnectionStatusUpdate Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:

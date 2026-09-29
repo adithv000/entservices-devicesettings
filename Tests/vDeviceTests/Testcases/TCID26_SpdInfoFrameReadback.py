@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID27_SpdInfoFrameReadback.py
+ * @file TCID26_SpdInfoFrameReadback.py
  * @brief L3 AVInput vComponent-driven testcase.
  *
- * @testcase TCID27_SpdInfoFrameReadback
+ * @testcase TCID26_SpdInfoFrameReadback
  * @details Reads getSPD, injects an SPD InfoFrame through the vComponent
  *          (HDMIInput_SPDInfo_Frame.yaml) and re-reads getSPD to verify the new
  *          SPD is surfaced.
@@ -33,11 +33,11 @@
  *    source is present, reflects the injected SPD payload.
  *
  * @pass_criteria
- *  - The YAML post is accepted and getSPD returns a valid string; run_test()
- *    returns True.
+ *  - The YAML post is accepted and getSPD changes to a non-empty injected
+ *    value; run_test() returns True.
  *
  * @failure_criteria
- *  - The YAML post is rejected, or getSPD does not return an HDMISPD string.
+ *  - The YAML post is rejected, or getSPD is empty/unchanged after injection.
  */
 """
 
@@ -49,7 +49,6 @@ from utils import (
     send_curl_command,
     send_vcomponent_command,
     send_vcomponent_payload,
-    is_ok,
     log_info,
     log_success,
     log_error,
@@ -88,7 +87,7 @@ def run_test():
         start_resp = send_curl_command(AVInputApis.start_input(PORT))
         log_warning(f"startInput response: {start_resp}")
         if not result_success(start_resp):
-            log_error("TCID27_SpdInfoFrameReadback Failed ❌ (startInput rejected)")
+            log_error("TCID26_SpdInfoFrameReadback Failed ❌ (startInput rejected)")
             return False
         time.sleep(1)
 
@@ -96,56 +95,55 @@ def run_test():
         # applies the injected SPD frame instead of returning the baseline.
         log_info(f"Step 2: present source via {CONNECTION_YAML} + {SIGNAL_YAML}")
         if not _post_file(CONNECTION_YAML):
-            log_error("TCID27_SpdInfoFrameReadback Failed ❌ (connection_status YAML rejected)")
+            log_error("TCID26_SpdInfoFrameReadback Failed ❌ (connection_status YAML rejected)")
             return False
         time.sleep(1)
         if not _post_file(SIGNAL_YAML):
-            log_error("TCID27_SpdInfoFrameReadback Failed ❌ (signal_status YAML rejected)")
+            log_error("TCID26_SpdInfoFrameReadback Failed ❌ (signal_status YAML rejected)")
             return False
         time.sleep(2)
 
         # Step 3: read the current SPD BEFORE the injection.
         before_spd = _read_spd()
         if before_spd is None:
-            log_error("TCID27_SpdInfoFrameReadback Failed ❌ (getSPD missing HDMISPD before injection)")
+            log_error("TCID26_SpdInfoFrameReadback Failed ❌ (getSPD missing HDMISPD before injection)")
             return False
         log_info(f"getSPD BEFORE injection = '{before_spd or '<empty>'}'")
 
         # Step 4: inject the new SPD InfoFrame from the command YAML.
         log_info(f"Step 4: injecting spdinfo_frame via {SPD_YAML}")
         if not _post_spd():
-            log_error("TCID27_SpdInfoFrameReadback Failed ❌ (spdinfo_frame YAML rejected)")
+            log_error("TCID26_SpdInfoFrameReadback Failed ❌ (spdinfo_frame YAML rejected)")
             return False
         time.sleep(2)
 
         # Step 5: re-read getSPD and verify the new value.
         after_spd = _read_spd()
         if after_spd is None:
-            log_error("TCID27_SpdInfoFrameReadback Failed ❌ (getSPD missing HDMISPD after injection)")
+            log_error("TCID26_SpdInfoFrameReadback Failed ❌ (getSPD missing HDMISPD after injection)")
             return False
         log_info(f"getSPD AFTER injection = '{after_spd or '<empty>'}'")
 
-        if after_spd:
-            if after_spd != before_spd:
-                log_success(f"✅ SPD updated after injection: '{before_spd}' -> '{after_spd}'")
-            else:
-                log_warning(
-                    "getSPD returned the same value after injection: the vComponent did not "
-                    "apply the new SPD (port not presented, or getSPD decodes only the "
-                    "vendor/product region which is unchanged). Accepting queryability."
-                )
-        else:
-            log_warning(
-                "getSPD is empty after injection (headless vDevice without a presented source); "
-                "accepting injection acceptance + queryability."
+        if not after_spd:
+            log_error(
+                "TCID26_SpdInfoFrameReadback Failed ❌ "
+                "(getSPD is empty after injection)"
             )
+            return False
+        if after_spd == before_spd:
+            log_error(
+                "TCID26_SpdInfoFrameReadback Failed ❌ "
+                "(getSPD was unchanged after injection)"
+            )
+            return False
+        log_success(f"✅ SPD updated after injection: '{before_spd}' -> '{after_spd}'")
     finally:
         send_vcomponent_payload("signal_status", {"port": PORT, "state": "NO_SIGNAL"})
         send_vcomponent_payload("connection_status", {"port": PORT, "connected": False})
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID27_SpdInfoFrameReadback Passed ✅"
+    msg = "TCID26_SpdInfoFrameReadback Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:

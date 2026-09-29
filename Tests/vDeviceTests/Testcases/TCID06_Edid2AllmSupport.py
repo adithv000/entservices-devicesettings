@@ -52,6 +52,8 @@ def run_test():
     start_time = time.perf_counter()
 
     original_version = parse_edid_version(send_curl_command(AVInputApis.get_edid_version(PORT)))
+    original_allm = parse_allm_support(send_curl_command(AVInputApis.get_edid2_allm_support(PORT)))
+    log_info(f"Baseline: edidVersion={original_version} allmSupport={original_allm}")
 
     try:
         # ALLM-in-EDID is gated on EDID 2.0 in the middleware; select it first.
@@ -73,6 +75,8 @@ def run_test():
             return False
         log_success("✅ ALLM-in-EDID disabled")
     finally:
+        if isinstance(original_allm, bool):
+            send_curl_command(AVInputApis.set_edid2_allm_support(PORT, original_allm))
         if original_version in (AVInputApis.EDID_VERSION_14, AVInputApis.EDID_VERSION_20):
             send_curl_command(AVInputApis.set_edid_version(PORT, original_version))
 

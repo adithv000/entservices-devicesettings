@@ -54,8 +54,8 @@ def run_test():
         log_info(f"  HDMI input devices: {devices}")
 
     # Best-effort: ensure nothing is presenting from a previous run.
-    # stop_resp = send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
-    # log_warning(f"stopInput (baseline) response: {stop_resp}")
+    stop_resp = send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
+    log_warning(f"stopInput (baseline) response: {stop_resp}")
 
     time.sleep(1)
     log_success("Suite initialization completed successfully")

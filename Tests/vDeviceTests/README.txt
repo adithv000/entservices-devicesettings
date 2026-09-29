@@ -17,7 +17,7 @@ Scenario suite (multi-step user journeys):
 
 Run a single test (repeatable):
   python3 SuiteManager.py devicesettings --test TCID03_StartStopInput
-  python3 SuiteManager.py devicesettings_scenarios --test TCID14_EdidProvisioningWorkflow
+  python3 SuiteManager.py devicesettings_scenarios --test TCID13_EdidProvisioningWorkflow
 
 Default Actions:
 Plugin activation and deactivation are done around every testcase by default:
@@ -42,7 +42,7 @@ Useful overrides:
 - WPEFRAMEWORK_JSONRPC_URL     (full URL, highest priority)
 - AVINPUT_EVENT_TIMEOUT        (seconds to wait for each notification; default 8)
 
-TCID28 and TCID29 capture JSON-RPC notifications over a persistent WebSocket
+TCID27 and TCID28 capture JSON-RPC notifications over a persistent WebSocket
 implemented with the Python standard library; no pip packages are required.
 
 Examples:
@@ -69,44 +69,43 @@ TCID06_Edid2AllmSupport        - EDID-2.0 gated ALLM-in-EDID set/get.
 TCID07_GameFeatureAllmStatus   - getSupportedGameFeatures + getGameFeatureStatus.
 TCID08_HdmiVersion             - getHdmiVersion returns capability version.
 TCID09_SetVideoRectangle       - setVideoRectangle (full-screen + PIP).
-TCID10_ContentProtected        - contentProtected returns HDCP-protected boolean.
-TCID11_InvalidParameterHandling- malformed portId/typeOfInput handled gracefully.
+TCID10_InvalidParameterHandling- malformed portId/typeOfInput handled gracefully.
 
 SCENARIO TEST CASES (suite: devicesettings_scenarios)
 ----------------------------------------------
 Multi-step user journeys chaining several APIs, with baseline capture and
 restore in a finally block so each scenario leaves the device as it found it.
 
-TCID12_PortEnumerationConsistency - numberOfInputs vs getInputDevices cross-check
+TCID11_PortEnumerationConsistency - numberOfInputs vs getInputDevices cross-check
                                    (count, contiguous ids, locator/id match).
-TCID13_InputSwitchingLifecycle    - direct source switching across all ports
+TCID12_InputSwitchingLifecycle    - direct source switching across all ports
                                    without an intervening stop + stop idempotency.
-TCID14_EdidProvisioningWorkflow   - readEDID -> setEdidVersion -> writeEDID ->
+TCID13_EdidProvisioningWorkflow   - readEDID -> setEdidVersion -> writeEDID ->
                                    re-read; validates base64 + 128-byte blocks.
-TCID15_GameModeProvisioning       - Game Mode on/off via ALLM-in-EDID, with ALLM
+TCID14_GameModeProvisioning       - Game Mode on/off via ALLM-in-EDID, with ALLM
                                    status queried in both states.
-TCID16_VrrProvisioning            - VRR advertisement toggled on/off and verified.
-TCID17_MultiPortIndependence      - opposing settings on 2 ports; asserts no
+TCID15_VrrProvisioning            - VRR advertisement toggled on/off and verified.
+TCID16_MultiPortIndependence      - opposing settings on 2 ports; asserts no
                                    cross-contamination between ports.
-TCID18_PresentationWindowWorkflow - full-screen -> PIP -> move -> restore -> stop,
+TCID17_PresentationWindowWorkflow - full-screen -> PIP -> move -> restore -> stop,
                                    plus post-stop geometry call handling.
-TCID19_SourceInspectionWorkflow   - one-pass diagnostics report (HDMI version,
-                                   SPD, raw SPD, video mode, content protection).
-TCID20_AudioMixingWorkflow        - requestAudioMix true/false + mixer level sweep
+TCID18_SourceInspectionWorkflow   - one-pass diagnostics report (HDMI version,
+                                   SPD, raw SPD, and video mode).
+TCID19_AudioMixingWorkflow        - requestAudioMix true/false + mixer level sweep
                                    including both 0/100 extremes.
-TCID21_NegativeAndBoundaryHandling- non-numeric + out-of-range portId, unknown
+TCID20_NegativeAndBoundaryHandling- non-numeric + out-of-range portId, unknown
                                    typeOfInput, invalid edidVersion, then health.
-TCID22_DisconnectedPortBehaviour  - locks in graceful degradation on a port with
+TCID21_DisconnectedPortBehaviour  - locks in graceful degradation on a port with
                                    no source (empty video mode, not errors).
-TCID23_AidlEventCoverage          - injects connection, signal, VIC, VRR, AVI,
+TCID22_AidlEventCoverage          - injects connection, signal, VIC, VRR, AVI,
                                    audio, SPD, DRM, VSIF, and HDCP events.
-TCID28_StableSignalState          - drives HDMI signal transitions and captures
+TCID27_StableSignalState          - drives HDMI signal transitions and captures
                                    each onSignalChanged notification.
-TCID29_NoSigToStableSignalTransition - captures no-signal, unstable-signal, and
+TCID28_NoSigToStableSignalTransition - captures no-signal, unstable-signal, and
                                       stable-signal notifications in order.
-TCID30_InvalidPortStartStopInput  - rejects startInput with invalid portId 10,
+TCID29_InvalidPortStartStopInput  - rejects startInput with invalid portId 10,
                                    then verifies normal stop/start still works.
-TCID31_AviInfoFrameNotification  - posts the AVI InfoFrame YAML and captures the
+TCID30_AviInfoFrameNotification  - posts the AVI InfoFrame YAML and captures the
                                    aviContentTypeUpdate notification.
 
 VERIFIED JSON-RPC CONTRACT
@@ -124,7 +123,6 @@ were confirmed against a live vDevice run (wpeframework_vdevice.log, 21/21 pass)
   getVRRSupport   : {"vrrSupport":false,"success":true}
   getHdmiVersion  : {"HdmiCapabilityVersion":"2.1","success":true}
   getSPD/getRawSPD: {"HDMISPD":"...","success":true}
-  contentProtected: {"isContentProtected":true,"success":true}
   currentVideoMode: {"currentVideoMode":"","success":true}  <- empty w/o a source
 
 Known vDevice behaviours the scenarios accommodate:
@@ -136,7 +134,7 @@ Known vDevice behaviours the scenarios accommodate:
 
 NOTE ON ASYNC EVENTS
 --------------------
-TCID23 posts connection, signal, video format, VRR, and InfoFrame stimuli to
+TCID22 posts connection, signal, video format, VRR, and InfoFrame stimuli to
 the HDMI Input vComponent. JSON is sent as valid YAML directly to postKVP, so
 the test does not depend on local command-template files. Some vComponent
 builds apply a command and close the connection without a response; curl error

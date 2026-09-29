@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID29_NoSigToStableSignalTransition.py
+ * @file TCID28_NoSigToStableSignalTransition.py
  * @brief Reproduces HDMI signal-change notifications with vComponent stimuli.
  *
- * @testcase TCID29_NoSigToStableSignalTransition
+ * @testcase TCID28_NoSigToStableSignalTransition
  * @details Registers for onSignalChanged, presents HDMI port 0, and injects a
  *          sequence of distinct signal states through the HDMI Input
  *          vComponent. Each resulting notification payload is captured and
@@ -25,10 +25,10 @@
 import os
 
 import AVInput_Curl as AVInputApis
+from AVInput_Helpers import result_success
 from utils import (
     HDMIIN_CMD_BASE,
     JsonRpcEventListener,
-    is_ok,
     log_error,
     log_info,
     log_success,
@@ -84,25 +84,25 @@ def run_test():
     listener = JsonRpcEventListener(
         AVInputApis.CALLSIGN,
         "onSignalChanged",
-        "ID_TCID29_signal",
+        "ID_TCID28_signal",
         timeout=EVENT_TIMEOUT,
     )
     if not listener.connect():
-        log_error("TCID29_NoSigToStableSignalTransition Failed (event registration rejected)")
+        log_error("TCID28_NoSigToStableSignalTransition Failed (event registration rejected)")
         return False
 
     try:
         # Establish a known baseline before driving distinct transitions.
         if not _post_signal("NO_SIGNAL"):
-            log_error("TCID29_NoSigToStableSignalTransition Failed (baseline rejected)")
+            log_error("TCID28_NoSigToStableSignalTransition Failed (baseline rejected)")
             return False
         if not _expect_signal(listener, AVInputApis.SIGNAL_NO):
             return False
 
         start_response = send_curl_command(AVInputApis.start_input(PORT))
         log_warning(f"startInput response: {start_response}")
-        if not is_ok(start_response):
-            log_error("TCID29_NoSigToStableSignalTransition Failed (startInput rejected)")
+        if not result_success(start_response):
+            log_error("TCID28_NoSigToStableSignalTransition Failed (startInput rejected)")
             return False
 
         http_code, body = send_vcomponent_payload(
@@ -110,7 +110,7 @@ def run_test():
         )
         log_warning(f"vComponent connection_status(connected=true): HTTP {http_code} {body}")
         if http_code != 200:
-            log_error("TCID29_NoSigToStableSignalTransition Failed (connection rejected)")
+            log_error("TCID28_NoSigToStableSignalTransition Failed (connection rejected)")
             return False
 
         transitions = (
@@ -125,7 +125,7 @@ def run_test():
             accepted = _post_yaml(yaml_file)
             if not accepted:
                 log_error(
-                    f"TCID29_NoSigToStableSignalTransition Failed ({yaml_file} injection rejected)"
+                    f"TCID28_NoSigToStableSignalTransition Failed ({yaml_file} injection rejected)"
                 )
                 return False
             if not _expect_signal(listener, expected_status):

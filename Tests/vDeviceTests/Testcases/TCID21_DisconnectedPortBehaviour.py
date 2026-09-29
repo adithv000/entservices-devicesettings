@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID22_DisconnectedPortBehaviour.py
+ * @file TCID21_DisconnectedPortBehaviour.py
  * @brief L3 AVInput scenario testcase.
  *
- * @testcase TCID22_DisconnectedPortBehaviour
+ * @testcase TCID21_DisconnectedPortBehaviour
  * @details Scenario: the platform is asked to present a port that has no source
  *          attached - the common vDevice / bench state. Documents and locks in
  *          the contracted behaviour observed on the target:
@@ -57,12 +57,12 @@ def run_test():
     log_warning(f"getInputDevices response: {dev_resp}")
     devices = parse_input_devices(dev_resp)
     if devices is None:
-        log_error("TCID22_DisconnectedPortBehaviour Failed ❌ (device list invalid)")
+        log_error("TCID21_DisconnectedPortBehaviour Failed ❌ (device list invalid)")
         return False
 
     connected = get_device_connected(devices, PORT)
     if connected is None:
-        log_error("TCID22_DisconnectedPortBehaviour Failed ❌ (port 0 not present in device list)")
+        log_error("TCID21_DisconnectedPortBehaviour Failed ❌ (port 0 not present in device list)")
         return False
 
     if connected:
@@ -75,7 +75,7 @@ def run_test():
         start_resp = send_curl_command(AVInputApis.start_input(PORT))
         log_warning(f"startInput response: {start_resp}")
         if not result_success(start_resp):
-            log_error("TCID22_DisconnectedPortBehaviour Failed ❌ (startInput rejected)")
+            log_error("TCID21_DisconnectedPortBehaviour Failed ❌ (startInput rejected)")
             return False
         log_success("✅ startInput accepted on port with no source")
         time.sleep(2)
@@ -85,7 +85,7 @@ def run_test():
         log_warning(f"currentVideoMode response: {mode_resp}")
         mode = parse_current_video_mode(mode_resp)
         if mode is None:
-            log_error("TCID22_DisconnectedPortBehaviour Failed ❌ (currentVideoMode not a string)")
+            log_error("TCID21_DisconnectedPortBehaviour Failed ❌ (currentVideoMode not a string)")
             return False
         if not connected and mode != "":
             log_info(f"Note: disconnected port reported a non-empty video mode: '{mode}'")
@@ -95,7 +95,7 @@ def run_test():
         edid_resp = send_curl_command(AVInputApis.read_edid(PORT))
         log_warning(f"readEDID response: {edid_resp}")
         if not parse_edid(edid_resp):
-            log_error("TCID22_DisconnectedPortBehaviour Failed ❌ (readEDID unavailable)")
+            log_error("TCID21_DisconnectedPortBehaviour Failed ❌ (readEDID unavailable)")
             return False
         log_success("✅ readEDID serviceable without a source")
 
@@ -103,14 +103,14 @@ def run_test():
         ver_resp = send_curl_command(AVInputApis.get_hdmi_version(PORT))
         log_warning(f"getHdmiVersion response: {ver_resp}")
         if not parse_hdmi_version(ver_resp):
-            log_error("TCID22_DisconnectedPortBehaviour Failed ❌ (getHdmiVersion unavailable)")
+            log_error("TCID21_DisconnectedPortBehaviour Failed ❌ (getHdmiVersion unavailable)")
             return False
         log_success("✅ getHdmiVersion serviceable without a source")
     finally:
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID22_DisconnectedPortBehaviour Passed ✅"
+    msg = "TCID21_DisconnectedPortBehaviour Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:

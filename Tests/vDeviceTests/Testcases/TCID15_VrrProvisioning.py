@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID16_VrrProvisioning.py
+ * @file TCID15_VrrProvisioning.py
  * @brief L3 AVInput scenario testcase.
  *
- * @testcase TCID16_VrrProvisioning
+ * @testcase TCID15_VrrProvisioning
  * @details Scenario: enabling Variable Refresh Rate advertisement on an HDMI
  *          port so a games console negotiates VRR. Sequence:
  *            setEdidVersion(HDMI2.0) -> setVRRSupport(true) -> get (true)
@@ -60,18 +60,18 @@ def run_test():
         ver_resp = send_curl_command(AVInputApis.set_edid_version(PORT, AVInputApis.EDID_VERSION_20))
         log_warning(f"setEdidVersion(HDMI2.0) response: {ver_resp}")
         if not result_success(ver_resp):
-            log_error("TCID16_VrrProvisioning Failed ❌ (could not select EDID 2.0)")
+            log_error("TCID15_VrrProvisioning Failed ❌ (could not select EDID 2.0)")
             return False
 
         log_info("Step 2: advertise VRR support")
         if not _toggle_vrr(True):
-            log_error("TCID16_VrrProvisioning Failed ❌ (VRR support not enabled)")
+            log_error("TCID15_VrrProvisioning Failed ❌ (VRR support not enabled)")
             return False
         log_success("✅ VRR advertised in EDID")
 
         log_info("Step 3: withdraw VRR support")
         if not _toggle_vrr(False):
-            log_error("TCID16_VrrProvisioning Failed ❌ (VRR support not disabled)")
+            log_error("TCID15_VrrProvisioning Failed ❌ (VRR support not disabled)")
             return False
         log_success("✅ VRR withdrawn from EDID")
     finally:
@@ -81,7 +81,7 @@ def run_test():
             send_curl_command(AVInputApis.set_edid_version(PORT, original_version))
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID16_VrrProvisioning Passed ✅"
+    msg = "TCID15_VrrProvisioning Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:

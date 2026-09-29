@@ -63,16 +63,6 @@ def parse_current_video_mode(curl_response):
     return None
 
 
-def parse_content_protected(curl_response):
-    """Return the isContentProtected bool, or None."""
-    result = parse_result(curl_response)
-    if isinstance(result, dict):
-        value = result.get("isContentProtected")
-        if isinstance(value, bool):
-            return value
-    return None
-
-
 def parse_edid_version(curl_response):
     """Return the edidVersion string, or None."""
     result = parse_result(curl_response)

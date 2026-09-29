@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID13_InputSwitchingLifecycle.py
+ * @file TCID12_InputSwitchingLifecycle.py
  * @brief L3 AVInput scenario testcase.
  *
- * @testcase TCID13_InputSwitchingLifecycle
+ * @testcase TCID12_InputSwitchingLifecycle
  * @details Scenario: a user switches between HDMI sources from the input menu.
  *          Walks the full presentation lifecycle across every reported port:
  *            start(port 0) -> start(port 1) [direct switch, no stop]
@@ -41,7 +41,7 @@ def run_test():
 
     count = parse_number_of_inputs(send_curl_command(AVInputApis.number_of_inputs))
     if not count:
-        log_error("TCID13_InputSwitchingLifecycle Failed ❌ (no HDMI input ports reported)")
+        log_error("TCID12_InputSwitchingLifecycle Failed ❌ (no HDMI input ports reported)")
         return False
     log_info(f"Ports available for switching: {count}")
 
@@ -53,7 +53,7 @@ def run_test():
             resp = send_curl_command(AVInputApis.start_input(port))
             log_warning(f"startInput(port={port}) response: {resp}")
             if not result_success(resp):
-                log_error(f"TCID13_InputSwitchingLifecycle Failed ❌ ({label} rejected)")
+                log_error(f"TCID12_InputSwitchingLifecycle Failed ❌ ({label} rejected)")
                 return False
             log_success(f"✅ {label} accepted")
             previous = port
@@ -63,7 +63,7 @@ def run_test():
         stop_resp = send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
         log_warning(f"stopInput response: {stop_resp}")
         if not result_success(stop_resp):
-            log_error("TCID13_InputSwitchingLifecycle Failed ❌ (stopInput rejected)")
+            log_error("TCID12_InputSwitchingLifecycle Failed ❌ (stopInput rejected)")
             return False
         log_success("✅ stopInput accepted")
 
@@ -71,14 +71,14 @@ def run_test():
         stop_again = send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
         log_warning(f"stopInput (again) response: {stop_again}")
         if not result_success(stop_again):
-            log_error("TCID13_InputSwitchingLifecycle Failed ❌ (redundant stopInput not handled)")
+            log_error("TCID12_InputSwitchingLifecycle Failed ❌ (redundant stopInput not handled)")
             return False
         log_success("✅ Redundant stopInput handled cleanly")
     finally:
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID13_InputSwitchingLifecycle Passed ✅"
+    msg = "TCID12_InputSwitchingLifecycle Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:

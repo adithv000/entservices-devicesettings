@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID17_MultiPortIndependence.py
+ * @file TCID16_MultiPortIndependence.py
  * @brief L3 AVInput scenario testcase.
  *
- * @testcase TCID17_MultiPortIndependence
+ * @testcase TCID16_MultiPortIndependence
  * @details Scenario: a TV with several HDMI ports must keep per-port settings
  *          isolated - provisioning port 0 must not leak into port 1. Applies
  *          opposing EDID-version and ALLM settings to two ports and verifies
@@ -69,7 +69,7 @@ def run_test():
     count = parse_number_of_inputs(send_curl_command(AVInputApis.number_of_inputs))
     if not count or count < 2:
         log_error(
-            f"TCID17_MultiPortIndependence Failed ❌ "
+            f"TCID16_MultiPortIndependence Failed ❌ "
             f"(needs >= 2 HDMI ports, device reports {count})"
         )
         return False
@@ -81,12 +81,12 @@ def run_test():
     try:
         log_info(f"Step 1: provision port {PORT_A} -> HDMI2.0 + ALLM true")
         if not _provision(PORT_A, AVInputApis.EDID_VERSION_20, True):
-            log_error("TCID17_MultiPortIndependence Failed ❌ (port A provisioning rejected)")
+            log_error("TCID16_MultiPortIndependence Failed ❌ (port A provisioning rejected)")
             return False
 
         log_info(f"Step 2: provision port {PORT_B} -> HDMI1.4 + ALLM false")
         if _provision(PORT_B, AVInputApis.EDID_VERSION_14, False):
-            log_error("TCID17_MultiPortIndependence Failed ❌ (port B provisioning accepted unexpectedly)")
+            log_error("TCID16_MultiPortIndependence Failed ❌ (port B provisioning accepted unexpectedly)")
             return False
 
         log_info("Step 3: re-read both ports and confirm isolation")
@@ -96,16 +96,16 @@ def run_test():
         log_info(f"  port {PORT_B}: edidVersion={ver_b} allm={allm_b}")
 
         if ver_a != AVInputApis.EDID_VERSION_20:
-            log_error(f"TCID17_MultiPortIndependence Failed ❌ (port A version leaked: {ver_a})")
+            log_error(f"TCID16_MultiPortIndependence Failed ❌ (port A version leaked: {ver_a})")
             return False
         if ver_b != AVInputApis.EDID_VERSION_14:
-            log_error(f"TCID17_MultiPortIndependence Failed ❌ (port B version leaked: {ver_b})")
+            log_error(f"TCID16_MultiPortIndependence Failed ❌ (port B version leaked: {ver_b})")
             return False
         if allm_a is not True:
-            log_error(f"TCID17_MultiPortIndependence Failed ❌ (port A ALLM leaked: {allm_a})")
+            log_error(f"TCID16_MultiPortIndependence Failed ❌ (port A ALLM leaked: {allm_a})")
             return False
         if allm_b is not False:
-            log_error(f"TCID17_MultiPortIndependence Failed ❌ (port B ALLM leaked: {allm_b})")
+            log_error(f"TCID16_MultiPortIndependence Failed ❌ (port B ALLM leaked: {allm_b})")
             return False
 
         log_success("✅ Per-port EDID version and ALLM settings are isolated")
@@ -117,7 +117,7 @@ def run_test():
                 send_curl_command(AVInputApis.set_edid2_allm_support(port, allm))
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID17_MultiPortIndependence Passed ✅"
+    msg = "TCID16_MultiPortIndependence Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:

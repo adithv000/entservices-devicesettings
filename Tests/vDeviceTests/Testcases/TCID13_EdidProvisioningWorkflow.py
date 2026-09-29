@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID14_EdidProvisioningWorkflow.py
+ * @file TCID13_EdidProvisioningWorkflow.py
  * @brief L3 AVInput scenario testcase.
  *
- * @testcase TCID14_EdidProvisioningWorkflow
+ * @testcase TCID13_EdidProvisioningWorkflow
  * @details Scenario: a provisioning agent reads the factory EDID, switches the
  *          port to EDID 2.0, writes an EDID payload back, and confirms the port
  *          still serves a readable EDID. Sequence:
@@ -55,16 +55,16 @@ def run_test():
     log_warning(f"readEDID response: {read_resp}")
     original_edid = parse_edid(read_resp)
     if not original_edid:
-        log_error("TCID14_EdidProvisioningWorkflow Failed ❌ (readEDID returned no EDID)")
+        log_error("TCID13_EdidProvisioningWorkflow Failed ❌ (readEDID returned no EDID)")
         return False
 
     decoded_len = _decoded_len(original_edid)
     if decoded_len is None:
-        log_error("TCID14_EdidProvisioningWorkflow Failed ❌ (EDID is not valid base64)")
+        log_error("TCID13_EdidProvisioningWorkflow Failed ❌ (EDID is not valid base64)")
         return False
     if decoded_len == 0 or decoded_len % 128 != 0:
         log_error(
-            f"TCID14_EdidProvisioningWorkflow Failed ❌ "
+            f"TCID13_EdidProvisioningWorkflow Failed ❌ "
             f"(EDID length {decoded_len} is not a 128-byte multiple)"
         )
         return False
@@ -78,14 +78,14 @@ def run_test():
         set_resp = send_curl_command(AVInputApis.set_edid_version(PORT, AVInputApis.EDID_VERSION_20))
         log_warning(f"setEdidVersion response: {set_resp}")
         if not result_success(set_resp):
-            log_error("TCID14_EdidProvisioningWorkflow Failed ❌ (setEdidVersion rejected)")
+            log_error("TCID13_EdidProvisioningWorkflow Failed ❌ (setEdidVersion rejected)")
             return False
 
         log_info("Step 3: getEdidVersion (verify)")
         ver_resp = send_curl_command(AVInputApis.get_edid_version(PORT))
         log_warning(f"getEdidVersion response: {ver_resp}")
         if parse_edid_version(ver_resp) != AVInputApis.EDID_VERSION_20:
-            log_error("TCID14_EdidProvisioningWorkflow Failed ❌ (EDID version did not persist)")
+            log_error("TCID13_EdidProvisioningWorkflow Failed ❌ (EDID version did not persist)")
             return False
         log_success("✅ EDID version set to HDMI2.0 and verified")
 
@@ -93,7 +93,7 @@ def run_test():
         write_resp = send_curl_command(AVInputApis.write_edid(PORT, original_edid))
         log_warning(f"writeEDID response: {write_resp}")
         if not result_success(write_resp):
-            log_error("TCID14_EdidProvisioningWorkflow Failed ❌ (writeEDID rejected)")
+            log_error("TCID13_EdidProvisioningWorkflow Failed ❌ (writeEDID rejected)")
             return False
         log_success("✅ writeEDID accepted")
 
@@ -101,8 +101,9 @@ def run_test():
         final_resp = send_curl_command(AVInputApis.read_edid(PORT))
         log_warning(f"readEDID response: {final_resp}")
         final_edid = parse_edid(final_resp)
-        if not final_edid or _decoded_len(final_edid) is None:
-            log_error("TCID14_EdidProvisioningWorkflow Failed ❌ (post-write EDID unreadable)")
+        final_len = _decoded_len(final_edid)
+        if not final_edid or final_len is None or final_len == 0 or final_len % 128 != 0:
+            log_error("TCID13_EdidProvisioningWorkflow Failed ❌ (post-write EDID unreadable or invalid)")
             return False
         log_success("✅ EDID readable after write")
     finally:
@@ -110,7 +111,7 @@ def run_test():
             send_curl_command(AVInputApis.set_edid_version(PORT, original_version))
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID14_EdidProvisioningWorkflow Passed ✅"
+    msg = "TCID13_EdidProvisioningWorkflow Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:

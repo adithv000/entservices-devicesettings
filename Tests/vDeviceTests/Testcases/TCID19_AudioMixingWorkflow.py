@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID20_AudioMixingWorkflow.py
+ * @file TCID19_AudioMixingWorkflow.py
  * @brief L3 AVInput scenario testcase.
  *
- * @testcase TCID20_AudioMixingWorkflow
+ * @testcase TCID19_AudioMixingWorkflow
  * @details Scenario: an app keeps its own audio audible while an HDMI source is
  *          presented (e.g. voice guidance over a games console). Sequence:
  *            startInput(port 0, requestAudioMix=true)
@@ -57,7 +57,7 @@ def run_test():
         )
         log_warning(f"startInput (mixed) response: {mixed_resp}")
         if not result_success(mixed_resp):
-            log_error("TCID20_AudioMixingWorkflow Failed ❌ (mixed-audio start rejected)")
+            log_error("TCID19_AudioMixingWorkflow Failed ❌ (mixed-audio start rejected)")
             return False
         log_success("✅ Started with audio mixing requested")
 
@@ -67,7 +67,7 @@ def run_test():
             log_warning(f"setMixerLevels response: {resp}")
             if not result_success(resp):
                 log_error(
-                    f"TCID20_AudioMixingWorkflow Failed ❌ "
+                    f"TCID19_AudioMixingWorkflow Failed ❌ "
                     f"(mixer levels {primary}/{source} rejected)"
                 )
                 return False
@@ -78,7 +78,7 @@ def run_test():
         stop_resp = send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
         log_warning(f"stopInput response: {stop_resp}")
         if not result_success(stop_resp):
-            log_error("TCID20_AudioMixingWorkflow Failed ❌ (stopInput rejected)")
+            log_error("TCID19_AudioMixingWorkflow Failed ❌ (stopInput rejected)")
             return False
 
         log_info("Step: restart with requestAudioMix=false (exclusive source audio)")
@@ -87,14 +87,14 @@ def run_test():
         )
         log_warning(f"startInput (exclusive) response: {exclusive_resp}")
         if not result_success(exclusive_resp):
-            log_error("TCID20_AudioMixingWorkflow Failed ❌ (exclusive-audio start rejected)")
+            log_error("TCID19_AudioMixingWorkflow Failed ❌ (exclusive-audio start rejected)")
             return False
         log_success("✅ Started with audio mixing disabled")
     finally:
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID20_AudioMixingWorkflow Passed ✅"
+    msg = "TCID19_AudioMixingWorkflow Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:

@@ -61,10 +61,10 @@ def run_test():
     log_info("Re-reading EDID after write")
     reread_resp = send_curl_command(AVInputApis.read_edid(PORT))
     log_warning(f"readEDID (after write) response: {reread_resp}")
-    if not parse_edid(reread_resp):
-        log_error("TCID05_ReadWriteEdid Failed ❌ (re-read EDID empty/invalid)")
+    reread_edid = parse_edid(reread_resp)
+    if reread_edid != edid:
+        log_error("TCID05_ReadWriteEdid Failed ❌ (re-read EDID does not match written EDID)")
         return False
-    log_success("✅ EDID re-read after write")
 
     elapsed_time = time.perf_counter() - start_time
     msg = "TCID05_ReadWriteEdid Passed ✅"

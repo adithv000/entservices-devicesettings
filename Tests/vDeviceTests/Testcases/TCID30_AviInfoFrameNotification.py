@@ -24,10 +24,10 @@
 import os
 
 import AVInput_Curl as AVInputApis
+from AVInput_Helpers import result_success
 from utils import (
     HDMIIN_CMD_BASE,
     JsonRpcEventListener,
-    is_ok,
     log_error,
     log_success,
     log_warning,
@@ -80,7 +80,7 @@ def run_test():
     try:
         start_response = send_curl_command(AVInputApis.start_input(PORT))
         log_warning(f"startInput response: {start_response}")
-        if not is_ok(start_response):
+        if not result_success(start_response):
             log_error("TCID30_AviInfoFrameNotification Failed (startInput rejected)")
             return False
 

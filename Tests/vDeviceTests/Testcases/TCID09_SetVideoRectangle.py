@@ -31,7 +31,7 @@
 import time
 import os
 
-from utils import send_curl_command, is_ok, log_info, log_success, log_error, log_warning
+from utils import send_curl_command, log_info, log_success, log_error, log_warning
 import AVInput_Curl as AVInputApis
 from AVInput_Helpers import result_success
 
@@ -44,7 +44,7 @@ def run_test():
     try:
         start_resp = send_curl_command(AVInputApis.start_input(PORT))
         log_warning(f"startInput response: {start_resp}")
-        if not is_ok(start_resp):
+        if not result_success(start_resp):
             log_error("TCID09_SetVideoRectangle Failed ❌ (startInput not accepted)")
             return False
 

@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID30_InvalidPortStartStopInput.py
+ * @file TCID29_InvalidPortStartStopInput.py
  * @brief L3 AVInput negative lifecycle testcase.
  *
- * @testcase TCID30_InvalidPortStartStopInput
+ * @testcase TCID29_InvalidPortStartStopInput
  * @details Calls startInput with invalid port 10 and verifies that the request
  *          is rejected. It then calls stopInput and verifies that a valid input
  *          can still be started and stopped normally.
@@ -31,7 +31,8 @@ import os
 import time
 
 import AVInput_Curl as AVInputApis
-from utils import is_ok, log_error, log_info, log_success, log_warning, parse_result, responded, send_curl_command
+from AVInput_Helpers import result_success
+from utils import log_error, log_info, log_success, log_warning, responded, send_curl_command
 
 
 VALID_PORT = 0
@@ -46,35 +47,32 @@ def run_test():
         invalid_response = send_curl_command(AVInputApis.start_input(INVALID_PORT))
         log_warning(f"startInput(portId={INVALID_PORT}) response: {invalid_response}")
         if not responded(invalid_response):
-            log_error("TCID30_InvalidPortStartStopInput Failed (invalid startInput received no response)")
+            log_error("TCID29_InvalidPortStartStopInput Failed (invalid startInput received no response)")
             return False
 
-        invalid_result = parse_result(invalid_response)
-        if is_ok(invalid_response) and (
-            not isinstance(invalid_result, dict) or invalid_result.get("success") is not False
-        ):
-            log_error(f"TCID30_InvalidPortStartStopInput Failed (invalid port {INVALID_PORT} accepted)")
+        if result_success(invalid_response):
+            log_error(f"TCID29_InvalidPortStartStopInput Failed (invalid port {INVALID_PORT} accepted)")
             return False
         log_success(f"startInput rejected invalid port {INVALID_PORT}")
 
         log_info("Calling stopInput after the invalid start request")
         stop_response = send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
         log_warning(f"stopInput response: {stop_response}")
-        if not is_ok(stop_response):
-            log_error("TCID30_InvalidPortStartStopInput Failed (stopInput rejected)")
+        if not result_success(stop_response):
+            log_error("TCID29_InvalidPortStartStopInput Failed (stopInput rejected)")
             return False
 
         log_info(f"Starting HDMI input on valid port {VALID_PORT} after invalid request")
         recovery_response = send_curl_command(AVInputApis.start_input(VALID_PORT))
         log_warning(f"recovery startInput response: {recovery_response}")
-        if not is_ok(recovery_response):
-            log_error("TCID30_InvalidPortStartStopInput Failed (valid start after invalid request failed)")
+        if not result_success(recovery_response):
+            log_error("TCID29_InvalidPortStartStopInput Failed (valid start after invalid request failed)")
             return False
     finally:
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
 
     elapsed_time = time.perf_counter() - start_time
-    message = "TCID30_InvalidPortStartStopInput Passed"
+    message = "TCID29_InvalidPortStartStopInput Passed"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{message} time consumed: {elapsed_time:.3f}s")
     else:

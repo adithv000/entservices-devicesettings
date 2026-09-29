@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID11_InvalidParameterHandling.py
+ * @file TCID10_InvalidParameterHandling.py
  * @brief L3 AVInput robustness testcase for malformed parameters.
  *
- * @testcase TCID11_InvalidParameterHandling
+ * @testcase TCID10_InvalidParameterHandling
  * @details Sends requests with invalid parameter values that mirror the malformed
  *          curls in curl_extract.txt:
  *            - getEdid2AllmSupport  (portId="S")
@@ -61,7 +61,7 @@ def run_test():
         resp = send_curl_command(cmd)
         log_warning(f"Response: {resp}")
         if not responded(resp):
-            log_error(f"TCID11_InvalidParameterHandling Failed ❌ (no response for {label})")
+            log_error(f"TCID10_InvalidParameterHandling Failed ❌ (no response for {label})")
             return False
         log_success(f"✅ Handled gracefully: {label}")
 
@@ -69,12 +69,12 @@ def run_test():
     health = send_curl_command(AVInputApis.number_of_inputs)
     log_warning(f"Response: {health}")
     if not is_ok(health):
-        log_error("TCID11_InvalidParameterHandling Failed ❌ (plugin unresponsive after malformed input)")
+        log_error("TCID10_InvalidParameterHandling Failed ❌ (plugin unresponsive after malformed input)")
         return False
     log_success("✅ Plugin responsive after malformed input")
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID11_InvalidParameterHandling Passed ✅"
+    msg = "TCID10_InvalidParameterHandling Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:

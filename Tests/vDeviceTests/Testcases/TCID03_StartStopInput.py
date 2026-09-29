@@ -31,10 +31,10 @@
 
 import time
 import os
+from AVInput_Helpers import result_success
 from utils import (
     HDMIIN_CMD_BASE,
     JsonRpcEventListener,
-    is_ok,
     log_info,
     log_error,
     log_success,
@@ -83,7 +83,7 @@ def run_test():
         log_info("Executing startInput on port 0 (primary plane)")
         start_resp = send_curl_command(AVInputApis.start_input(PORT, plane=0, top_most=True))
         log_warning(f"startInput response: {start_resp}")
-        if not is_ok(start_resp):
+        if not result_success(start_resp):
             log_error("TCID03_StartStopInput Failed ❌ (startInput did not succeed)")
             return False
         log_success("✅ startInput accepted")
@@ -96,7 +96,7 @@ def run_test():
         log_info("Executing stopInput (HDMI)")
         stop_resp = send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
         log_warning(f"stopInput response: {stop_resp}")
-        if not is_ok(stop_resp):
+        if not result_success(stop_resp):
             log_error("TCID03_StartStopInput Failed ❌ (stopInput did not succeed)")
             return False
         log_success("✅ stopInput accepted")
@@ -104,10 +104,10 @@ def run_test():
         if not _expect_input_status_changed(listener, "stopped"):
             return False
 
-        # Idempotency: a second stopInput must still yield a valid response.
+        # Idempotency: a second stopInput must still report success.
         stop_again = send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
         log_warning(f"stopInput (again) response: {stop_again}")
-        if not is_ok(stop_again):
+        if not result_success(stop_again):
             log_error("TCID03_StartStopInput Failed ❌ (second stopInput not handled)")
             return False
     finally:

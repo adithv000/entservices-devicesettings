@@ -90,7 +90,6 @@ def _curl_raw(method, params=None, timeout=5, request_id=42):
 # ---------------------------------------------------------------------------
 number_of_inputs = _curl("numberOfInputs")
 current_video_mode = _curl("currentVideoMode")
-content_protected = _curl("contentProtected")
 get_supported_game_features = _curl("getSupportedGameFeatures")
 get_arc_port_id = _curl("getARCPortId")
 

@@ -1,9 +1,9 @@
 """
 /**
- * @file TCID21_NegativeAndBoundaryHandling.py
+ * @file TCID20_NegativeAndBoundaryHandling.py
  * @brief L3 AVInput scenario testcase.
  *
- * @testcase TCID21_NegativeAndBoundaryHandling
+ * @testcase TCID20_NegativeAndBoundaryHandling
  * @details Scenario: a misbehaving client sends malformed and out-of-range
  *          requests. The plugin must reject them without crashing and must stay
  *          serviceable for well-formed traffic afterwards. Exercises:
@@ -70,7 +70,7 @@ def run_test():
             resp = send_curl_command(cmd)
             log_warning(f"Response: {resp}")
             if not responded(resp):
-                log_error(f"TCID21_NegativeAndBoundaryHandling Failed ❌ (no response for {label})")
+                log_error(f"TCID20_NegativeAndBoundaryHandling Failed ❌ (no response for {label})")
                 return False
             log_success(f"✅ Answered without dropping connection: {label}")
 
@@ -78,7 +78,7 @@ def run_test():
         health = send_curl_command(AVInputApis.number_of_inputs)
         log_warning(f"Response: {health}")
         if not is_ok(health) or parse_number_of_inputs(health) is None:
-            log_error("TCID21_NegativeAndBoundaryHandling Failed ❌ (plugin unhealthy after fuzzing)")
+            log_error("TCID20_NegativeAndBoundaryHandling Failed ❌ (plugin unhealthy after fuzzing)")
             return False
         log_success("✅ Plugin healthy after malformed traffic")
 
@@ -86,14 +86,14 @@ def run_test():
         good = send_curl_command(AVInputApis.get_edid_version(0))
         log_warning(f"Response: {good}")
         if not parse_edid_version(good):
-            log_error("TCID21_NegativeAndBoundaryHandling Failed ❌ (valid getter broken after fuzzing)")
+            log_error("TCID20_NegativeAndBoundaryHandling Failed ❌ (valid getter broken after fuzzing)")
             return False
         log_success("✅ Valid requests still served correctly")
     finally:
         send_curl_command(AVInputApis.stop_input(AVInputApis.TYPE_HDMI))
 
     elapsed_time = time.perf_counter() - start_time
-    msg = "TCID21_NegativeAndBoundaryHandling Passed ✅"
+    msg = "TCID20_NegativeAndBoundaryHandling Passed ✅"
     if os.environ.get("AVINPUT_TIMING_ENABLED"):
         log_success(f"{msg} time consumed: {elapsed_time:.3f}s")
     else:
