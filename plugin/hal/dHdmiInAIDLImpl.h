@@ -114,6 +114,14 @@ private:
     std::function<void(int32_t, int32_t)>                                                                 m_AVLatencyCallback;
     std::function<void(DeviceSettingsHDMIIn::HDMIInPort, DeviceSettingsHDMIIn::HDMIInVRRType)>            m_VRRStatusCallback;
     std::function<void(DeviceSettingsHDMIIn::HDMIInPort, bool)>                                           m_StatusCallback;
+    std::mutex                                                                                            m_callbackMutex;
+
+    template <typename Callback>
+    Callback getCallbackCopy(const Callback& callback)
+    {
+        std::lock_guard<std::mutex> lock(m_callbackMutex);
+        return callback;
+    }
 
     // ---- AIDL service/port state (replacing s_aidl* file-scope statics) ----
     sp<IHDMIInputManager>      m_aidlHdmiMgr;
@@ -157,8 +165,9 @@ private:
                     it->second.connected = connected;
                 }
             }
-            if (m_impl->m_HotPlugCallback)
-                m_impl->m_HotPlugCallback(
+            auto callback = m_impl->getCallbackCopy(m_impl->m_HotPlugCallback);
+            if (callback)
+                callback(
                     static_cast<DeviceSettingsHDMIIn::HDMIInPort>(m_portId), connected);
             return ::android::binder::Status::ok();
         }
@@ -171,8 +180,9 @@ private:
                 auto it = m_impl->m_aidlPorts.find(m_portId);
                 if (it != m_impl->m_aidlPorts.end()) it->second.signalState = (int)signalState;
             }
-            if (m_impl->m_SignalStatusCallback)
-                m_impl->m_SignalStatusCallback(
+            auto callback = m_impl->getCallbackCopy(m_impl->m_SignalStatusCallback);
+            if (callback)
+                callback(
                     static_cast<DeviceSettingsHDMIIn::HDMIInPort>(m_portId),
                     static_cast<DeviceSettingsHDMIIn::HDMIInSignalStatus>((int)signalState));
             return ::android::binder::Status::ok();
@@ -185,7 +195,8 @@ private:
                 auto it = m_impl->m_aidlPorts.find(m_portId);
                 if (it != m_impl->m_aidlPorts.end()) it->second.lastVIC = (int)vic;
             }
-            if (m_impl->m_VideoModeUpdateCallback) {
+            auto callback = m_impl->getCallbackCopy(m_impl->m_VideoModeUpdateCallback);
+            if (callback) {
                 dsVideoPortResolution_t dsRes;
                 dHdmiInAIDLImpl::aidlVicToRes(vic, dsRes);
                 DeviceSettingsHDMIIn::HDMIVideoPortResolution res;
@@ -195,7 +206,7 @@ private:
                 res.stereoScopicMode = static_cast<DeviceSettingsHDMIIn::HDMIInVideoStereoScopicMode>(dsRes.stereoScopicMode);
                 res.frameRate        = static_cast<DeviceSettingsHDMIIn::HDMIInVideoFrameRate>(dsRes.frameRate);
                 res.interlaced       = dsRes.interlaced;
-                m_impl->m_VideoModeUpdateCallback(
+                callback(
                     static_cast<DeviceSettingsHDMIIn::HDMIInPort>(m_portId), res);
             }
             return ::android::binder::Status::ok();
@@ -216,8 +227,9 @@ private:
                     it->second.vrrFrameRate = frameRate;
                 }
             }
-            if (m_impl->m_VRRStatusCallback)
-                m_impl->m_VRRStatusCallback(
+            auto callback = m_impl->getCallbackCopy(m_impl->m_VRRStatusCallback);
+            if (callback)
+                callback(
                     static_cast<DeviceSettingsHDMIIn::HDMIInPort>(m_portId),
                     static_cast<DeviceSettingsHDMIIn::HDMIInVRRType>(vrrType));
             return ::android::binder::Status::ok();
@@ -228,8 +240,9 @@ private:
             dsAviContentType_t ct = dsAVICONTENT_TYPE_NOT_SIGNALLED;
             if (!dHdmiInAIDLImpl::aidlParseAviContentType(data, &ct))
                 return ::android::binder::Status::ok();
-            if (m_impl->m_AviContentTypeCallback)
-                m_impl->m_AviContentTypeCallback(
+            auto callback = m_impl->getCallbackCopy(m_impl->m_AviContentTypeCallback);
+            if (callback)
+                callback(
                     static_cast<DeviceSettingsHDMIIn::HDMIInPort>(m_portId),
                     static_cast<DeviceSettingsHDMIIn::HDMIInAviContentType>(ct));
             return ::android::binder::Status::ok();
@@ -283,8 +296,9 @@ private:
                 if (presented) m_impl->m_aidlActivePort = m_portId;
                 else if (m_impl->m_aidlActivePort == m_portId) m_impl->m_aidlActivePort = -1;
             }
-            if (m_impl->m_StatusCallback)
-                m_impl->m_StatusCallback(
+            auto callback = m_impl->getCallbackCopy(m_impl->m_StatusCallback);
+            if (callback)
+                callback(
                     static_cast<DeviceSettingsHDMIIn::HDMIInPort>(m_portId), presented);
             return ::android::binder::Status::ok();
         }
@@ -897,6 +911,7 @@ public:
         if (!m_hdmiInInitialized && !m_aidlPorts.empty()) {
             if (TV == profileType) {
                 // AIDL listeners registered in aidlHdmiInInit; just store the callbacks.
+                std::lock_guard<std::mutex> lock(m_callbackMutex);
                 if (bundle.OnHDMIInHotPlugEvent)         m_HotPlugCallback         = bundle.OnHDMIInHotPlugEvent;
                 if (bundle.OnHDMIInSignalStatusEvent)    m_SignalStatusCallback    = bundle.OnHDMIInSignalStatusEvent;
                 if (bundle.OnHDMIInStatusEvent)          m_StatusCallback          = bundle.OnHDMIInStatusEvent;
