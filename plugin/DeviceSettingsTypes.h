@@ -171,10 +171,12 @@ using AudioMS12ProfileState = DeviceSettingsAudio::MS12ProfileState;
 using AudioARCStatus = DeviceSettingsAudio::AudioARCStatus;
 using AudioTypeConfigInfo = DeviceSetting::AudioTypeConfigInfo;
 using AudioPortConfigInfo = DeviceSettingsAudio::AudioPortConfigInfo;
+using ApplicationAudioConfig = DeviceSettingsAudio::ApplicationAudioConfig;
 using IDeviceSettingsAudioEncodingIterator = DeviceSettingsAudio::IDeviceSettingsAudioEncodingIterator;
 using IDeviceSettingsAudioCompressionIterator = DeviceSettingsAudio::IDeviceSettingsAudioCompressionIterator;
 using IDeviceSettingsStereoModeIterator = DeviceSettingsAudio::IDeviceSettingsStereoModeIterator;
 using IDeviceSettingsAudioMS12AudioProfileIterator = DeviceSettingsAudio::IDeviceSettingsAudioMS12AudioProfileIterator;
+using IDeviceSettingsAudioApplicationConfigIterator = DeviceSettingsAudio::IDeviceSettingsAudioApplicationConfigIterator;
 
 // VideoPort type aliases for convenience
 using VideoPortType = DeviceSettingsVideoPort::VideoPort;

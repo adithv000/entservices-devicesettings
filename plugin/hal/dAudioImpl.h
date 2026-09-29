@@ -43,6 +43,23 @@
 #include <condition_variable>
 #include <chrono>
 
+// Fallback for DS HAL header sets predating the application audio config ABI; layout is frozen upstream.
+#ifndef DS_MAX_APPLICATION_AUDIO_CONFIG_NAME_LEN
+#define DS_MAX_APPLICATION_AUDIO_CONFIG_NAME_LEN 64
+#define DS_MAX_APPLICATION_AUDIO_CONFIGS 64
+
+typedef struct _dsApplicationAudioConfig_t {
+    char configName[DS_MAX_APPLICATION_AUDIO_CONFIG_NAME_LEN];
+} dsApplicationAudioConfig_t;
+
+typedef struct _dsApplicationAudioConfigList_t {
+    uint32_t size;
+    uint32_t totalCount;
+    uint32_t returnedCount;
+    dsApplicationAudioConfig_t config[DS_MAX_APPLICATION_AUDIO_CONFIGS];
+} dsApplicationAudioConfigList_t;
+#endif
+
 // Static global callback functions following HdmiIn pattern
 static std::function<void(const AudioPortType, const uint32_t, const bool)> g_AudioOutHotPlugCallback;
 static std::function<void(const AudioFormat)> g_AudioFormatUpdateCallback;
@@ -2522,6 +2539,106 @@ public:
             }
         } catch (...) {
             DSLOG_ERR("Exception in EnableAudioLEConfig");
+            return WPEFramework::Core::ERROR_GENERAL;
+        }
+        EXIT_LOG;
+        return WPEFramework::Core::ERROR_NONE;
+    }
+
+    uint32_t SetApplicationAudioConfig(const int32_t handle, const std::string& audioConfig, const bool enable) override {
+        ENTRY_LOG;
+        try {
+            using SetApplicationAudioConfigFunction = dsError_t (*)(intptr_t, dsApplicationAudioConfig_t*, bool);
+            static SetApplicationAudioConfigFunction dsSetApplicationAudioConfigFunc = nullptr;
+            if (dsSetApplicationAudioConfigFunc == nullptr) {
+                dsSetApplicationAudioConfigFunc = reinterpret_cast<SetApplicationAudioConfigFunction>(resolve(RDK_DSHAL_NAME, "dsSetApplicationAudioConfig"));
+                if (dsSetApplicationAudioConfigFunc == nullptr) {
+                    DSLOG_ERR("dsSetApplicationAudioConfig is not defined");
+                    return WPEFramework::Core::ERROR_GENERAL;
+                }
+            }
+
+            dsApplicationAudioConfig_t config = {};
+            strncpy(config.configName, audioConfig.c_str(), DS_MAX_APPLICATION_AUDIO_CONFIG_NAME_LEN - 1);
+            const dsError_t result = dsSetApplicationAudioConfigFunc(static_cast<intptr_t>(handle), &config, enable);
+            if (result != dsERR_NONE) {
+                DSLOG_ERR("dsSetApplicationAudioConfig failed with error: %d", result);
+                return WPEFramework::Core::ERROR_GENERAL;
+            }
+        } catch (...) {
+            DSLOG_ERR("Exception in SetApplicationAudioConfig");
+            return WPEFramework::Core::ERROR_GENERAL;
+        }
+        EXIT_LOG;
+        return WPEFramework::Core::ERROR_NONE;
+    }
+
+    uint32_t GetApplicationAudioConfig(const int32_t handle, const std::string& audioConfig, bool& enabled) override {
+        ENTRY_LOG;
+        try {
+            using GetApplicationAudioConfigFunction = dsError_t (*)(intptr_t, dsApplicationAudioConfig_t*, bool*);
+            static GetApplicationAudioConfigFunction dsGetApplicationAudioConfigFunc = nullptr;
+            if (dsGetApplicationAudioConfigFunc == nullptr) {
+                dsGetApplicationAudioConfigFunc = reinterpret_cast<GetApplicationAudioConfigFunction>(resolve(RDK_DSHAL_NAME, "dsGetApplicationAudioConfig"));
+                if (dsGetApplicationAudioConfigFunc == nullptr) {
+                    DSLOG_ERR("dsGetApplicationAudioConfig is not defined");
+                    return WPEFramework::Core::ERROR_GENERAL;
+                }
+            }
+
+            dsApplicationAudioConfig_t config = {};
+            strncpy(config.configName, audioConfig.c_str(), DS_MAX_APPLICATION_AUDIO_CONFIG_NAME_LEN - 1);
+            bool isEnabled = false;
+            const dsError_t result = dsGetApplicationAudioConfigFunc(static_cast<intptr_t>(handle), &config, &isEnabled);
+            if (result != dsERR_NONE) {
+                DSLOG_ERR("dsGetApplicationAudioConfig failed with error: %d", result);
+                return WPEFramework::Core::ERROR_GENERAL;
+            }
+            enabled = isEnabled;
+        } catch (...) {
+            DSLOG_ERR("Exception in GetApplicationAudioConfig");
+            return WPEFramework::Core::ERROR_GENERAL;
+        }
+        EXIT_LOG;
+        return WPEFramework::Core::ERROR_NONE;
+    }
+
+    uint32_t GetApplicationAudioConfigList(const int32_t handle, IDeviceSettingsAudioApplicationConfigIterator*& configList) const override {
+        ENTRY_LOG;
+        configList = nullptr;
+        try {
+            using GetApplicationAudioConfigListFunction = dsError_t (*)(intptr_t, dsApplicationAudioConfigList_t*);
+            static GetApplicationAudioConfigListFunction dsGetApplicationAudioConfigListFunc = nullptr;
+            if (dsGetApplicationAudioConfigListFunc == nullptr) {
+                dsGetApplicationAudioConfigListFunc = reinterpret_cast<GetApplicationAudioConfigListFunction>(resolve(RDK_DSHAL_NAME, "dsGetApplicationAudioConfigList"));
+                if (dsGetApplicationAudioConfigListFunc == nullptr) {
+                    DSLOG_ERR("dsGetApplicationAudioConfigList is not defined");
+                    return WPEFramework::Core::ERROR_GENERAL;
+                }
+            }
+
+            dsApplicationAudioConfigList_t halConfigList = {};
+            halConfigList.size = sizeof(halConfigList);
+            const dsError_t result = dsGetApplicationAudioConfigListFunc(static_cast<intptr_t>(handle), &halConfigList);
+            if (result != dsERR_NONE) {
+                DSLOG_ERR("dsGetApplicationAudioConfigList failed with error: %d", result);
+                return WPEFramework::Core::ERROR_GENERAL;
+            }
+
+            std::vector<ApplicationAudioConfig> configurations;
+            const size_t capacity = sizeof(halConfigList.config) / sizeof(halConfigList.config[0]);
+            const size_t count = (halConfigList.returnedCount < capacity) ? halConfigList.returnedCount : capacity;
+            configurations.reserve(count);
+            for (size_t index = 0; index < count; ++index) {
+                ApplicationAudioConfig config;
+                config.configName = halConfigList.config[index].configName;
+                configurations.emplace_back(config);
+            }
+
+            using ApplicationConfigIterator = WPEFramework::RPC::IteratorType<IDeviceSettingsAudioApplicationConfigIterator>;
+            configList = WPEFramework::Core::Service<ApplicationConfigIterator>::Create<IDeviceSettingsAudioApplicationConfigIterator>(configurations);
+        } catch (...) {
+            DSLOG_ERR("Exception in GetApplicationAudioConfigList");
             return WPEFramework::Core::ERROR_GENERAL;
         }
         EXIT_LOG;

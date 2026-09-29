@@ -145,6 +145,11 @@ public:
     uint32_t GetAudioLEConfig(const int32_t handle, bool &enabled);
     uint32_t EnableAudioLEConfig(const int32_t handle, const bool enable);
 
+    // Application Audio Configuration
+    uint32_t SetApplicationAudioConfig(const int32_t handle, const std::string& audioConfig, const bool enable);
+    uint32_t GetApplicationAudioConfig(const int32_t handle, const std::string& audioConfig, bool& enabled);
+    uint32_t GetApplicationAudioConfigList(const int32_t handle, IDeviceSettingsAudioApplicationConfigIterator*& configList) const;
+
     // Audio Delay Controls
     uint32_t SetAudioDelay(const int32_t handle, const uint32_t audioDelay);
     uint32_t GetAudioDelay(const int32_t handle, uint32_t &audioDelay);
