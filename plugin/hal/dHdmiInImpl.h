@@ -79,7 +79,7 @@ public:
         DeInitialiseHAL();
     }
 
-    void InitialiseHAL()
+    void InitialiseHAL() override
     {
         getDynamicAutoLatencyConfig();
 
@@ -101,7 +101,7 @@ public:
         }
     }
 
-    void DeInitialiseHAL()
+    void DeInitialiseHAL() override
     {
         // profileType is already initialized in DeviceSettingsImplementation.cpp
         DSLOG_INFO("profileType %d", profileType);
