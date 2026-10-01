@@ -96,9 +96,10 @@ void Audio::OnDolbyAtmosCapabilitiesChanged(DolbyAtmosCapability atmosCaps, bool
 
 void Audio::OnAudioModeChanged(AudioPortType portType, AudioStereoMode mode)
 {
-    DSLOG_INFO("portType=%d, mode=%d", static_cast<int>(portType), static_cast<int>(mode));
+    DSLOG_INFO("Audio::OnAudioModeChanged INVOKED - portType=%d, mode=%d, calling _parent.OnAudioModeEvent()", static_cast<int>(portType), static_cast<int>(mode));
     // Trigger notification to parent for callback dispatch
     _parent.OnAudioModeEvent(portType, mode);
+    DSLOG_INFO(" Audio::OnAudioModeChanged COMPLETE - event dispatched to parent");
 }
 
 // Event handler methods for audio state changes
