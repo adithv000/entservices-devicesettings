@@ -461,6 +461,15 @@ private:
             } else {
                 DSLOG_INFO("Audio atmos caps change callback registered successfully");
             }
+
+            // This is required to forward HAL stereo mode events to COM-RPC clients
+            ret = dsAudioRegisterStereoModeCallback(audioStereoModeCallback);
+            if (ret != dsERR_NONE) {
+                DSLOG_WARN("dsAudioRegisterStereoModeCallback FAILED with error: %d — " 
+                    "stereo mode change events will NOT be delivered to COM-RPC clients!", ret);
+            } else {
+                DSLOG_INFO("Audio stereo mode change callback registered successfully");
+            }
             
         } catch (...) {
             DSLOG_ERR("Exception in registerHALCallbacks");
@@ -5837,6 +5846,27 @@ private:
         // Call Audio event handler through global callback if available
         if (g_DolbyAtmosCapabilitiesChangedCallback) {
             g_DolbyAtmosCapabilitiesChangedCallback(wpeAtmosCaps, status);
+        }
+    }
+
+    // audioStereoModeCallback implementation - CRITICAL FIX: Handle stereo mode change events
+    static void audioStereoModeCallback(dsAudioPortType_t portType, dsAudioStereoMode_t stereoMode)
+    {
+        DSLOG_INFO("Audio stereo mode change event: portType=%d, stereoMode=%d", 
+                   static_cast<int>(portType), static_cast<int>(stereoMode));
+        
+        // Convert libds types to WPEFramework types
+        AudioPortType wpePortType = static_cast<AudioPortType>(portType);
+        AudioStereoMode wpeStereoMode = static_cast<AudioStereoMode>(stereoMode);
+        
+        // Call Audio event handler through global callback if available
+        // NOTE: This callback is invoked when HAL detects a stereo mode change from the device
+        if (g_AudioModeChangedCallback) {
+            DSLOG_INFO(" Dispatching AudioModeChanged callback (portType=%d, stereoMode=%d)",
+                       static_cast<int>(wpePortType), static_cast<int>(wpeStereoMode));
+            g_AudioModeChangedCallback(wpePortType, wpeStereoMode);
+        } else {
+            DSLOG_ERR(" g_AudioModeChangedCallback is NULL! Stereo mode event will NOT reach COM-RPC clients");
         }
     }
     
