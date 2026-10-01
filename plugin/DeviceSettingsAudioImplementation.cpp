@@ -20,6 +20,7 @@
 #include "DeviceSettingsAudioImplementation.h"
 
 #include <syscall.h>
+
 #include <vector>
 
 using namespace std;
