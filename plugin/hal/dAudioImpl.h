@@ -461,15 +461,6 @@ private:
             } else {
                 DSLOG_INFO("Audio atmos caps change callback registered successfully");
             }
-
-            // This is required to forward HAL stereo mode events to COM-RPC clients
-            ret = dsAudioRegisterStereoModeCallback(audioStereoModeCallback);
-            if (ret != dsERR_NONE) {
-                DSLOG_WARN("dsAudioRegisterStereoModeCallback FAILED with error: %d — " 
-                    "stereo mode change events will NOT be delivered to COM-RPC clients!", ret);
-            } else {
-                DSLOG_INFO("Audio stereo mode change callback registered successfully");
-            }
             
         } catch (...) {
             DSLOG_ERR("Exception in registerHALCallbacks");
@@ -5934,10 +5925,13 @@ private:
     // notifyAudioModeChanged implementation
     void notifyAudioModeChanged(AudioPortType portType, AudioStereoMode mode)
     {
-        DSLOG_INFO("Audio mode changed: portType=%d, mode=%d", static_cast<int>(portType), static_cast<int>(mode));
+        DSLOG_INFO("notifyAudioModeChanged CALLED: portType=%d, mode=%d", static_cast<int>(portType), static_cast<int>(mode));
         // Call Audio event handler using global callback if available
         if (g_AudioModeChangedCallback) {
+            DSLOG_INFO("g_AudioModeChangedCallback IS SET - invoking callback");
             g_AudioModeChangedCallback(portType, mode);
+        } else {
+            DSLOG_ERR(" g_AudioModeChangedCallback IS NOT SET! Audio mode events will NOT be delivered");
         }
     }
 
@@ -5993,8 +5987,10 @@ private:
         }
         
         if (bundle.OnAudioModeChanged) {
-            DSLOG_INFO("Audio Mode Changed Event Callback Registered");
+            DSLOG_INFO(" Audio Mode Changed Event Callback Registered - g_AudioModeChangedCallback SET");
             g_AudioModeChangedCallback = bundle.OnAudioModeChanged;
+        } else {
+            DSLOG_ERR(" bundle.OnAudioModeChanged IS NULL - callback will NOT be set!");
         }
         
         DSLOG_INFO("Audio callbacks set successfully");
