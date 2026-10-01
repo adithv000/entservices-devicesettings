@@ -274,11 +274,15 @@ namespace Plugin {
     }
 
     Core::hresult DeviceSettingsAudioImpl::SetStereoMode(const int32_t handle, const AudioStereoMode mode, const bool persist) {
-        DSLOG_INFO("handle=%d, mode=%d, persist=%s", handle, mode, persist ? "true" : "false");
+        DSLOG_INFO("\ud83d\udfe3 DeviceSettingsAudioImpl::SetStereoMode CALLED - handle=%d, mode=%d, persist=%s", handle, static_cast<int>(mode), persist ? "true" : "false");
         uint32_t result = _audio.SetStereoMode(handle, mode, persist);
+        if (result != WPEFramework::Core::ERROR_NONE) {
+            DSLOG_ERR("\ud83d\udd34 SetStereoMode FAILED with result=%u - NO audio mode change event will be triggered!", result);
+        } else {
+            DSLOG_INFO("\u2705 SetStereoMode SUCCESS - OnAudioModeEvent should have been called");
+        }
         return result;
     }
-
     // Associated audio mixing
     Core::hresult DeviceSettingsAudioImpl::SetAssociatedAudioMixing(const int32_t handle, const bool mixing) {
         DSLOG_INFO("handle=%d, mixing=%s", handle, mixing ? "true" : "false");
