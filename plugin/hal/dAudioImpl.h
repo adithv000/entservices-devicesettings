@@ -2625,14 +2625,12 @@ public:
                 return WPEFramework::Core::ERROR_GENERAL;
             }
 
-            std::vector<ApplicationAudioConfig> configurations;
+            std::vector<string> configurations;
             const size_t capacity = sizeof(halConfigList.config) / sizeof(halConfigList.config[0]);
             const size_t count = (halConfigList.returnedCount < capacity) ? halConfigList.returnedCount : capacity;
             configurations.reserve(count);
             for (size_t index = 0; index < count; ++index) {
-                ApplicationAudioConfig config;
-                config.configName = halConfigList.config[index].configName;
-                configurations.emplace_back(config);
+                configurations.emplace_back(halConfigList.config[index].configName);
             }
 
             using ApplicationConfigIterator = WPEFramework::RPC::IteratorType<IDeviceSettingsAudioApplicationConfigIterator>;

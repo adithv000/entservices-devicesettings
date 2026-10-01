@@ -171,7 +171,6 @@ using AudioMS12ProfileState = DeviceSettingsAudio::MS12ProfileState;
 using AudioARCStatus = DeviceSettingsAudio::AudioARCStatus;
 using AudioTypeConfigInfo = DeviceSetting::AudioTypeConfigInfo;
 using AudioPortConfigInfo = DeviceSettingsAudio::AudioPortConfigInfo;
-using ApplicationAudioConfig = DeviceSettingsAudio::ApplicationAudioConfig;
 using IDeviceSettingsAudioEncodingIterator = DeviceSettingsAudio::IDeviceSettingsAudioEncodingIterator;
 using IDeviceSettingsAudioCompressionIterator = DeviceSettingsAudio::IDeviceSettingsAudioCompressionIterator;
 using IDeviceSettingsStereoModeIterator = DeviceSettingsAudio::IDeviceSettingsStereoModeIterator;
