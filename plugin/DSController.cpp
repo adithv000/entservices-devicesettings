@@ -183,6 +183,12 @@ namespace Plugin {
         IARM_Bus_RegisterEventHandler(IARM_BUS_SYSMGR_NAME, IARM_BUS_SYSMGR_EVENT_SYSTEMSTATE, _EventHandler);
         IARM_Bus_RegisterCall(IARM_BUS_COMMON_API_SysModeChange, _SysModeChange);
 
+        // Audio HAL has no callback registration API for stereo mode changes; subscribe to the
+        // native DSMgr's IARM broadcast now that the bus connection above is up.
+        if (_deviceSettings) {
+            _deviceSettings->RegisterAudioModeIarmListener();
+        }
+
         // Initialize power event listener (migrated from dsMGR)
         // Note: service parameter will be passed separately via InitializePowerEventListener()
         _pwrEventListener = new DSPwrEventListener();
