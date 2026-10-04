@@ -30,6 +30,7 @@
 #include "DeviceSettingsTelemetry.h"
 #include <core/core.h>
 #include <com/com.h>
+#include "libIARM.h"
 
 #include <cstdint>
 #include <vector>
@@ -71,6 +72,15 @@ static std::function<void(const std::string&)> g_AudioSecondaryLanguageChangedCa
 static std::function<void(const AudioPortState)> g_AudioPortStateChangedCallback;
 static std::function<void(const float)> g_AudioLevelChangedCallback;
 static std::function<void(const AudioPortType, const AudioStereoMode)> g_AudioModeChangedCallback;
+
+struct DSMgrAudioModeIarmEventData {
+    union {
+        struct {
+            int type;
+            int mode;
+        } Audioport;
+    } data;
+};
 
 #ifdef IGNORE_EDID_LOGIC
 static bool g_AudioHdmiAuto = false;
@@ -123,7 +133,10 @@ private:
     bool _isDuckingInProgress;
     int32_t _volumeDuckingLevel;
     bool _muteStatus;
-    
+
+    // Guards RegisterAudioModeIarmListener() so it only subscribes once
+    bool _audioModeIarmListenerRegistered = false;
+
     // Audio port state tracking
     bool _audioPortEnabled[dsAUDIOPORT_TYPE_MAX];
 
@@ -460,8 +473,7 @@ private:
                 DSLOG_WARN("dsAudioAtmosCapsChangeRegisterCB failed with error: %d", ret);
             } else {
                 DSLOG_INFO("Audio atmos caps change callback registered successfully");
-            }
-            
+            }           
         } catch (...) {
             DSLOG_ERR("Exception in registerHALCallbacks");
             ret = dsERR_GENERAL;
@@ -472,6 +484,29 @@ private:
     }
 
 public:
+
+    // Subscribe to the native DSMgr's IARM_BUS_DSMGR_EVENT_AUDIO_MODE broadcast so externally
+    // triggered stereo mode changes (outside our own SetStereoMode() call path) still reach
+    // COM-RPC clients. Must be called after the process's IARM bus connection is established
+    // (DSController::Start() does IARM_Bus_Init/Connect); safe to call at most once.
+    dsError_t RegisterAudioModeIarmListener()
+    {
+        if (_audioModeIarmListenerRegistered) {
+            return dsERR_NONE;
+        }
+
+        IARM_Result_t iarmRet = IARM_Bus_RegisterEventHandler(
+            "DSMgr", static_cast<IARM_EventId_t>(IARM_BUS_DSMGR_EVENT_AUDIO_MODE), iarmAudioModeEventHandler);
+        if (iarmRet != IARM_RESULT_SUCCESS) {
+            DSLOG_ERR("IARM_Bus_RegisterEventHandler for IARM_BUS_DSMGR_EVENT_AUDIO_MODE FAILED with error: %d — "
+                      "stereo mode change events will NOT be delivered to COM-RPC clients!", iarmRet);
+            return dsERR_GENERAL;
+        }
+
+        _audioModeIarmListenerRegistered = true;
+        DSLOG_INFO("Subscribed to IARM_BUS_DSMGR_EVENT_AUDIO_MODE for stereo mode change events");
+        return dsERR_NONE;
+    }
     dAudioImpl() : _isInitialized(false), _isDuckingInProgress(false), _volumeDuckingLevel(0), _muteStatus(false)
     {
         for (int i = 0; i < dsAUDIOPORT_TYPE_MAX; i++) {
@@ -5860,7 +5895,23 @@ private:
             DSLOG_ERR(" g_AudioModeChangedCallback is NULL! Stereo mode event will NOT reach COM-RPC clients");
         }
     }
-    
+
+    static void iarmAudioModeEventHandler(const char* owner, IARM_EventId_t eventId, void* data, size_t len)
+    {
+        if (eventId != static_cast<IARM_EventId_t>(IARM_BUS_DSMGR_EVENT_AUDIO_MODE) || data == nullptr) {
+            return;
+        }
+
+        auto* eventData = static_cast<DSMgrAudioModeIarmEventData*>(data);
+        dsAudioPortType_t portType = static_cast<dsAudioPortType_t>(eventData->data.Audioport.type);
+        dsAudioStereoMode_t stereoMode = static_cast<dsAudioStereoMode_t>(eventData->data.Audioport.mode);
+
+        DSLOG_INFO("IARM_BUS_DSMGR_EVENT_AUDIO_MODE received from '%s': portType=%d, stereoMode=%d",
+                   owner ? owner : "unknown", static_cast<int>(portType), static_cast<int>(stereoMode));
+
+        audioStereoModeCallback(portType, stereoMode);
+    }
+
     // State Change Notification Functions using global callbacks
     // notifyAssociatedAudioMixingChanged implementation
     void notifyAssociatedAudioMixingChanged(bool mixing)
