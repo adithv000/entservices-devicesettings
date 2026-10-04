@@ -756,6 +756,14 @@ namespace Plugin {
         DELEGATE_TO_COMPONENT(_audioSettings, GetAudioHDMIARCPortId, handle, portId)
     }
 
+    void DeviceSettingsImp::RegisterAudioModeIarmListener() {
+        if (_audioSettings != nullptr) {
+            _audioSettings->RegisterAudioModeIarmListener();
+        } else {
+            DSLOG_ERR("RegisterAudioModeIarmListener: _audioSettings is null");
+        }
+    }
+
     // ============================================================================
     // IDeviceSettingsVideoPort interface implementation - delegate to _videoPortSettings interface
     // ============================================================================
