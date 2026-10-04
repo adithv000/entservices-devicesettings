@@ -261,6 +261,10 @@ namespace Plugin {
         Core::hresult ResetAudioSurroundVirtualizer(const int32_t handle) override;
         Core::hresult ResetAudioVolumeLeveller(const int32_t handle) override;
 
+        /** Called from DSController::Start() once the IARM bus connection is up, so externally
+         *  triggered stereo mode changes still reach our COM-RPC clients. */
+        void RegisterAudioModeIarmListener();
+
         // HDMI ARC
         Core::hresult GetAudioHDMIARCPortId(const int32_t handle, int32_t &portId) override;
         
