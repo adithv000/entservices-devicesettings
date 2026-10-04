@@ -75,6 +75,10 @@ public:
     /** Deferred HAL init — called from DeviceSettingsImp::Configure() */
     void InitialiseHAL() { std::static_pointer_cast<DefaultImpl>(_platform)->InitialiseHAL(); }
 
+    /** Subscribe to the native DSMgr's IARM stereo-mode broadcast — called once the IARM bus
+     *  connection is up (see DSController::Start()). */
+    void RegisterAudioModeIarmListener() { std::static_pointer_cast<DefaultImpl>(_platform)->RegisterAudioModeIarmListener(); }
+
     // Audio Port Management
     uint32_t GetAudioPort(const AudioPortType type, const int32_t index, int32_t &handle);
     uint32_t GetMS12Capabilities(const int32_t handle, IDeviceSettingsAudioCompressionIterator*& compressions);
