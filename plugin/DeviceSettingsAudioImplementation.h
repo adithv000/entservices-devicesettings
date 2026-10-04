@@ -277,6 +277,9 @@ namespace Plugin {
     public:
         /** Called from DeviceSettingsImp::Configure() to trigger deferred HAL init. */
         void InitialiseHAL() { _audio.InitialiseHAL(); }
+        /** Called from DSController::Start() once the IARM bus connection is up, so externally
+         *  triggered stereo mode changes reach our COM-RPC clients. */
+        void RegisterAudioModeIarmListener() { _audio.RegisterAudioModeIarmListener(); }
         std::list<std::pair<string, DeviceSettingsAudio::INotification*>> _AudioNotifications;
         mutable Core::CriticalSection _configLock;
         mutable Core::CriticalSection _callbackLock;
