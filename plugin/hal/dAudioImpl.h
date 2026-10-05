@@ -31,6 +31,7 @@
 #include <core/core.h>
 #include <com/com.h>
 #include "libIARM.h"
+#include "libIBus.h"
 
 #include <cstdint>
 #include <vector>
