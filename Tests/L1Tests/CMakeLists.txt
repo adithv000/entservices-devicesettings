@@ -27,6 +27,7 @@ find_package(${NAMESPACE}Plugins REQUIRED)
 
 set(TEST_SRC
     tests/test_DeviceSettings.cpp
+    tests/test_DeviceSettingsFPD.cpp
 )
 
 set(TEST_LIB
@@ -40,12 +41,16 @@ target_include_directories(${MODULE_NAME}
     PRIVATE
         ${CMAKE_SOURCE_DIR}/plugin
         ${CMAKE_SOURCE_DIR}/../rdk-halif-device_settings/include
-        ${CMAKE_SOURCE_DIR}/../devicesettings/ds/include)
+        ${CMAKE_SOURCE_DIR}/../devicesettings/ds/include
+        ${CMAKE_SOURCE_DIR}/../entservices-testframework/Tests/mocks
+        ${CMAKE_SOURCE_DIR}/../entservices-testframework/Tests/mocks/devicesettings
+        ${CMAKE_SOURCE_DIR}/../entservices-testframework/Tests/mocks/thunder)
 
 target_link_libraries(${MODULE_NAME} PRIVATE ${TEST_LIB})
 
 set_source_files_properties(
     tests/test_DeviceSettings.cpp
+    tests/test_DeviceSettingsFPD.cpp
     PROPERTIES COMPILE_FLAGS "-fexceptions")
 
 install(TARGETS ${MODULE_NAME} DESTINATION lib)

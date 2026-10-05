@@ -22,6 +22,7 @@
 
 #include "L2Tests.h"
 #include "L2TestsMock.h"
+#include <interfaces/IDeviceSettingsFPD.h>
 #include <interfaces/IDeviceSettings.h>
 
 #include <mutex>
@@ -104,4 +105,26 @@ TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_MethodTest)
 {
     EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
     ASSERT_NE(nullptr, m_deviceSettingsPlugin);
+}
+
+// Exercises the real activated org.rdk.DeviceSettings plugin end-to-end for the FPD
+// component, with only the extern "C" dsFPD.h HAL calls intercepted via p_dsFPDHalMock
+// (wired up by L2TestsMock). Mirrors entservices-powermanager's PowerManager_L2Test.cpp
+// HAL-mock-backed style.
+TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_FPDSetBrightness)
+{
+    EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_NE(nullptr, m_deviceSettingsPlugin);
+
+    Exchange::IDeviceSettingsFPD* fpd = m_deviceSettingsPlugin->QueryInterface<Exchange::IDeviceSettingsFPD>();
+    ASSERT_NE(nullptr, fpd);
+
+    EXPECT_CALL(*p_dsFPDHalMock, dsSetFPBrightness(dsFPD_INDICATOR_POWER, 50))
+        .Times(1)
+        .WillOnce(::testing::Return(dsERR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE,
+        fpd->SetFPDBrightness(Exchange::IDeviceSettingsFPD::DS_FPD_INDICATOR_POWER, 50, false));
+
+    fpd->Release();
 }
