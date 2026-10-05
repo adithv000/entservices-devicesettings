@@ -67,7 +67,11 @@ jobs:
             !install/usr/lib/pkgconfig/gtest.pc
             !install/usr/lib/pkgconfig/gtest_main.pc
             !install/usr/lib/wpeframework/plugins
-          key: ${{ runner.os }}-${{ env.THUNDER_COMMIT_SHA }}-${{ env.INTERFACES_REF }}-5
+          # Bumped -5 -> -6: entservices-apis@develop removed apis/Netflix/INetflix.h
+          # (commit 45537489) and the previously cached build/entservices-apis still
+          # contained a stale generated/ProxyStubs_Netflix.cpp depending on it, since
+          # this key is keyed by branch name (INTERFACES_REF) rather than commit SHA.
+          key: ${{ runner.os }}-${{ env.THUNDER_COMMIT_SHA }}-${{ env.INTERFACES_REF }}-6
 
       - name: Set up Python
         uses: actions/setup-python@v4

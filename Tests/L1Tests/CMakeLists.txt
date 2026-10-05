@@ -28,6 +28,13 @@ find_package(${NAMESPACE}Plugins REQUIRED)
 set(TEST_SRC
     tests/test_DeviceSettings.cpp
     tests/test_DeviceSettingsFPD.cpp
+    tests/test_DeviceSettingsHost.cpp
+    tests/test_DeviceSettingsDisplay.cpp
+    tests/test_DeviceSettingsCompositeIn.cpp
+    tests/test_DeviceSettingsAudio.cpp
+    tests/test_DeviceSettingsVideoPort.cpp
+    tests/test_DeviceSettingsVideoDevice.cpp
+    tests/test_DeviceSettingsHdmiIn.cpp
 )
 
 set(TEST_LIB
@@ -51,6 +58,13 @@ target_link_libraries(${MODULE_NAME} PRIVATE ${TEST_LIB})
 set_source_files_properties(
     tests/test_DeviceSettings.cpp
     tests/test_DeviceSettingsFPD.cpp
+    tests/test_DeviceSettingsHost.cpp
+    tests/test_DeviceSettingsDisplay.cpp
+    tests/test_DeviceSettingsCompositeIn.cpp
+    tests/test_DeviceSettingsAudio.cpp
+    tests/test_DeviceSettingsVideoPort.cpp
+    tests/test_DeviceSettingsVideoDevice.cpp
+    tests/test_DeviceSettingsHdmiIn.cpp
     PROPERTIES COMPILE_FLAGS "-fexceptions")
 
 install(TARGETS ${MODULE_NAME} DESTINATION lib)

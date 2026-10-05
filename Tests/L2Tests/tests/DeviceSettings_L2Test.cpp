@@ -23,6 +23,13 @@
 #include "L2Tests.h"
 #include "L2TestsMock.h"
 #include <interfaces/IDeviceSettingsFPD.h>
+#include <interfaces/IDeviceSettingsHost.h>
+#include <interfaces/IDeviceSettingsDisplay.h>
+#include <interfaces/IDeviceSettingsCompositeIn.h>
+#include <interfaces/IDeviceSettingsAudio.h>
+#include <interfaces/IDeviceSettingsVideoPort.h>
+#include <interfaces/IDeviceSettingsVideoDevice.h>
+#include <interfaces/IDeviceSettingsHDMIIn.h>
 #include <interfaces/IDeviceSettings.h>
 
 #include <mutex>
@@ -127,4 +134,184 @@ TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_FPDSetBrightness)
         fpd->SetFPDBrightness(Exchange::IDeviceSettingsFPD::DS_FPD_INDICATOR_POWER, 50, false));
 
     fpd->Release();
+}
+
+TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_HostGetEDID)
+{
+    EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_NE(nullptr, m_deviceSettingsPlugin);
+
+    Exchange::IDeviceSettingsHost* host = m_deviceSettingsPlugin->QueryInterface<Exchange::IDeviceSettingsHost>();
+    ASSERT_NE(nullptr, host);
+
+    EXPECT_CALL(*p_dsHostHalMock, dsGetHostEDID(::testing::_, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke([](unsigned char* edid, int* length) {
+            edid[0] = 0xAA;
+            *length = 1;
+            return dsERR_NONE;
+        }));
+
+    uint8_t edIdBytes[16] = {0};
+    EXPECT_EQ(Core::ERROR_NONE, host->GetEDID(edIdBytes, sizeof(edIdBytes)));
+    EXPECT_EQ(0xAA, edIdBytes[0]);
+
+    host->Release();
+}
+
+TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_DisplayGetDisplayAspectRatio)
+{
+    EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_NE(nullptr, m_deviceSettingsPlugin);
+
+    Exchange::IDeviceSettingsDisplay* display = m_deviceSettingsPlugin->QueryInterface<Exchange::IDeviceSettingsDisplay>();
+    ASSERT_NE(nullptr, display);
+
+    EXPECT_CALL(*p_dsDisplayHalMock, dsGetDisplay(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Invoke([](dsVideoPortType_t, int, intptr_t* handle) {
+            *handle = 1;
+            return dsERR_NONE;
+        }));
+    int32_t handle = -1;
+    EXPECT_EQ(Core::ERROR_NONE,
+        display->GetDisplay(Exchange::IDeviceSettingsDisplay::DS_DISPLAY_PORT_TYPE_HDMI, 0, handle));
+
+    EXPECT_CALL(*p_dsDisplayHalMock, dsGetDisplayAspectRatio(handle, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke([](intptr_t, dsVideoAspectRatio_t* aspectRatio) {
+            *aspectRatio = dsVIDEO_ASPECT_RATIO_4x3;
+            return dsERR_NONE;
+        }));
+
+    Exchange::IDeviceSettingsDisplay::DisplayVideoAspectRatio ratio =
+        Exchange::IDeviceSettingsDisplay::DS_DISPLAY_ASPECT_RATIO_16X9;
+    EXPECT_EQ(Core::ERROR_NONE, display->GetDisplayAspectRatio(handle, ratio));
+    EXPECT_EQ(Exchange::IDeviceSettingsDisplay::DS_DISPLAY_ASPECT_RATIO_4X3, ratio);
+
+    display->Release();
+}
+
+TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_CompositeInGetNrOfInputs)
+{
+    EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_NE(nullptr, m_deviceSettingsPlugin);
+
+    Exchange::IDeviceSettingsCompositeIn* compositeIn =
+        m_deviceSettingsPlugin->QueryInterface<Exchange::IDeviceSettingsCompositeIn>();
+    ASSERT_NE(nullptr, compositeIn);
+
+    EXPECT_CALL(*p_dsCompositeInHalMock, dsCompositeInGetNumberOfInputs(::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke([](uint8_t* nrInputs) {
+            *nrInputs = 2;
+            return dsERR_NONE;
+        }));
+
+    int32_t nrCompositeInputs = 0;
+    EXPECT_EQ(Core::ERROR_NONE, compositeIn->GetNrOfCompositeInputs(nrCompositeInputs));
+    EXPECT_EQ(2, nrCompositeInputs);
+
+    compositeIn->Release();
+}
+
+TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_AudioSetMute)
+{
+    EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_NE(nullptr, m_deviceSettingsPlugin);
+
+    Exchange::IDeviceSettingsAudio* audio = m_deviceSettingsPlugin->QueryInterface<Exchange::IDeviceSettingsAudio>();
+    ASSERT_NE(nullptr, audio);
+
+    EXPECT_CALL(*p_dsAudioHalMock, dsGetAudioPort(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Invoke([](dsAudioPortType_t, int, intptr_t* handle) {
+            *handle = 1;
+            return dsERR_NONE;
+        }));
+    int32_t handle = -1;
+    EXPECT_EQ(Core::ERROR_NONE,
+        audio->GetAudioPort(Exchange::IDeviceSettingsAudio::AUDIO_PORT_TYPE_SPEAKER, 0, handle));
+
+    EXPECT_CALL(*p_dsAudioHalMock, dsSetAudioMute(handle, true))
+        .Times(1)
+        .WillOnce(::testing::Return(dsERR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE, audio->SetAudioMute(handle, true));
+
+    audio->Release();
+}
+
+TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_VideoPortEnable)
+{
+    EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_NE(nullptr, m_deviceSettingsPlugin);
+
+    Exchange::IDeviceSettingsVideoPort* videoPort =
+        m_deviceSettingsPlugin->QueryInterface<Exchange::IDeviceSettingsVideoPort>();
+    ASSERT_NE(nullptr, videoPort);
+
+    EXPECT_CALL(*p_dsVideoPortHalMock, dsGetVideoPort(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Invoke([](dsVideoPortType_t, int, intptr_t* handle) {
+            *handle = 1;
+            return dsERR_NONE;
+        }));
+    int32_t handle = -1;
+    EXPECT_EQ(Core::ERROR_NONE,
+        videoPort->GetVideoPort(Exchange::IDeviceSettingsVideoPort::DS_VIDEO_PORT_TYPE_HDMI, 0, handle));
+
+    EXPECT_CALL(*p_dsVideoPortHalMock, dsEnableVideoPort(handle, true))
+        .Times(1)
+        .WillOnce(::testing::Return(dsERR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE, videoPort->EnableVideoPort(handle, true));
+
+    videoPort->Release();
+}
+
+TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_VideoDeviceDFC)
+{
+    EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_NE(nullptr, m_deviceSettingsPlugin);
+
+    Exchange::IDeviceSettingsVideoDevice* videoDevice =
+        m_deviceSettingsPlugin->QueryInterface<Exchange::IDeviceSettingsVideoDevice>();
+    ASSERT_NE(nullptr, videoDevice);
+
+    EXPECT_CALL(*p_dsVideoDeviceHalMock, dsGetVideoDevice(::testing::_, ::testing::_))
+        .WillOnce(::testing::Invoke([](int, intptr_t* handle) {
+            *handle = 1;
+            return dsERR_NONE;
+        }));
+    int32_t handle = -1;
+    EXPECT_EQ(Core::ERROR_NONE, videoDevice->GetVideoDeviceHandle(0, handle));
+
+    EXPECT_CALL(*p_dsVideoDeviceHalMock, dsSetDFC(handle, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Return(dsERR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE,
+        videoDevice->SetVideoDeviceDFC(handle, Exchange::IDeviceSettingsVideoDevice::DS_VIDEO_DEVICE_ZOOM_FULL));
+
+    videoDevice->Release();
+}
+
+TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_HdmiInNumberOfInputs)
+{
+    EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_NE(nullptr, m_deviceSettingsPlugin);
+
+    Exchange::IDeviceSettingsHDMIIn* hdmiIn = m_deviceSettingsPlugin->QueryInterface<Exchange::IDeviceSettingsHDMIIn>();
+    ASSERT_NE(nullptr, hdmiIn);
+
+    EXPECT_CALL(*p_dsHdmiInHalMock, dsHdmiInGetNumberOfInputs(::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke([](uint8_t* count) {
+            *count = 3;
+            return dsERR_NONE;
+        }));
+
+    int32_t count = 0;
+    EXPECT_EQ(Core::ERROR_NONE, hdmiIn->GetHDMIInNumberOfInputs(count));
+    EXPECT_EQ(3, count);
+
+    hdmiIn->Release();
 }
