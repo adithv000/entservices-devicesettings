@@ -33,7 +33,7 @@ git checkout $THUNDER_COMMIT_SHA
 cd ..
 
 git clone --branch develop https://github.com/rdkcentral/entservices-apis.git
-git clone --branch 2.0.3 https://github.com/rdkcentral/entservices-testframework.git
+git clone --branch feature/RDKEMW-25013 https://github.com/rdkcentral/entservices-testframework.git
 git clone --branch main https://github.com/rdkcentral/rdk-halif-device_settings.git
 git clone --branch main https://github.com/rdkcentral/devicesettings.git
 git clone --branch develop https://github.com/rdkcentral/iarmbus.git
