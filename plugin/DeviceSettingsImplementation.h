@@ -192,7 +192,7 @@ namespace Plugin {
         // Application Audio Configuration
         Core::hresult SetApplicationAudioConfig(const int32_t handle, const string& audioConfig, const bool enable) override;
         Core::hresult GetApplicationAudioConfig(const int32_t handle, const string& audioConfig, bool& enabled) override;
-        Core::hresult GetApplicationAudioConfigList(const int32_t handle, IDeviceSettingsAudioApplicationConfigIterator*& configList) const override;
+        Core::hresult GetApplicationAudioConfigList(const int32_t handle, IStringIterator*& configList) const override;
 
         // Audio Delay Controls
         Core::hresult SetAudioDelay(const int32_t handle, const uint32_t audioDelay) override;

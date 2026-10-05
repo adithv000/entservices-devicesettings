@@ -2603,7 +2603,7 @@ public:
         return WPEFramework::Core::ERROR_NONE;
     }
 
-    uint32_t GetApplicationAudioConfigList(const int32_t handle, IDeviceSettingsAudioApplicationConfigIterator*& configList) const override {
+    uint32_t GetApplicationAudioConfigList(const int32_t handle, IStringIterator*& configList) const override {
         ENTRY_LOG;
         configList = nullptr;
         try {
@@ -2633,8 +2633,8 @@ public:
                 configurations.emplace_back(halConfigList.config[index].configName);
             }
 
-            using ApplicationConfigIterator = WPEFramework::RPC::IteratorType<IDeviceSettingsAudioApplicationConfigIterator>;
-            configList = WPEFramework::Core::Service<ApplicationConfigIterator>::Create<IDeviceSettingsAudioApplicationConfigIterator>(configurations);
+            using ApplicationConfigIterator = WPEFramework::RPC::IteratorType<string, RPC::ID_STRINGITERATOR>;
+            configList = WPEFramework::Core::Service<ApplicationConfigIterator>::Create<RPC::ID_STRINGITERATOR>(configurations);
         } catch (...) {
             DSLOG_ERR("Exception in GetApplicationAudioConfigList");
             return WPEFramework::Core::ERROR_GENERAL;

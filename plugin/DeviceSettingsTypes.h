@@ -175,7 +175,6 @@ using IDeviceSettingsAudioEncodingIterator = DeviceSettingsAudio::IDeviceSetting
 using IDeviceSettingsAudioCompressionIterator = DeviceSettingsAudio::IDeviceSettingsAudioCompressionIterator;
 using IDeviceSettingsStereoModeIterator = DeviceSettingsAudio::IDeviceSettingsStereoModeIterator;
 using IDeviceSettingsAudioMS12AudioProfileIterator = DeviceSettingsAudio::IDeviceSettingsAudioMS12AudioProfileIterator;
-using IDeviceSettingsAudioApplicationConfigIterator = DeviceSettingsAudio::IDeviceSettingsAudioApplicationConfigIterator;
 
 // VideoPort type aliases for convenience
 using VideoPortType = DeviceSettingsVideoPort::VideoPort;
