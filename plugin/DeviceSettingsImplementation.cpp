@@ -607,7 +607,7 @@ namespace Plugin {
         DELEGATE_TO_COMPONENT(_audioSettings, GetApplicationAudioConfig, handle, audioConfig, enabled)
     }
 
-    Core::hresult DeviceSettingsImp::GetApplicationAudioConfigList(const int32_t handle, IDeviceSettingsAudioApplicationConfigIterator*& configList) const {
+    Core::hresult DeviceSettingsImp::GetApplicationAudioConfigList(const int32_t handle, IStringIterator*& configList) const {
         DELEGATE_TO_COMPONENT(_audioSettings, GetApplicationAudioConfigList, handle, configList)
     }
     
