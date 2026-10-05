@@ -592,7 +592,7 @@ uint32_t Audio::GetApplicationAudioConfig(const int32_t handle, const string& au
     return (_platform != nullptr) ? _platform->GetApplicationAudioConfig(handle, audioConfig, enabled) : WPEFramework::Core::ERROR_UNAVAILABLE;
 }
 
-uint32_t Audio::GetApplicationAudioConfigList(const int32_t handle, IStringIterator*& configList) const {
+uint32_t Audio::GetApplicationAudioConfigList(const int32_t handle, IDeviceSettingsAudio::IStringIterator*& configList) const {
     return (_platform != nullptr) ? _platform->GetApplicationAudioConfigList(handle, configList) : WPEFramework::Core::ERROR_UNAVAILABLE;
 }
 

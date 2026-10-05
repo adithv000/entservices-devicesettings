@@ -170,7 +170,7 @@ namespace Plugin {
         // Application Audio Configuration
         Core::hresult SetApplicationAudioConfig(const int32_t handle, const std::string& audioConfig, const bool enable);
         Core::hresult GetApplicationAudioConfig(const int32_t handle, const std::string& audioConfig, bool& enabled);
-        Core::hresult GetApplicationAudioConfigList(const int32_t handle, IStringIterator*& configList) const;
+        Core::hresult GetApplicationAudioConfigList(const int32_t handle, Exchange::IDeviceSettingsAudio::IStringIterator*& configList) const;
 
         // Audio Delay Controls
         Core::hresult SetAudioDelay(const int32_t handle, const uint32_t audioDelay);

@@ -451,7 +451,7 @@ namespace Plugin {
         return _audio.GetApplicationAudioConfig(handle, audioConfig, enabled);
     }
 
-    Core::hresult DeviceSettingsAudioImpl::GetApplicationAudioConfigList(const int32_t handle, IStringIterator*& configList) const {
+    Core::hresult DeviceSettingsAudioImpl::GetApplicationAudioConfigList(const int32_t handle, Exchange::IDeviceSettingsAudio::IStringIterator*& configList) const {
         return _audio.GetApplicationAudioConfigList(handle, configList);
     }
     

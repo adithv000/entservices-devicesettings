@@ -2604,7 +2604,7 @@ public:
         return WPEFramework::Core::ERROR_NONE;
     }
 
-    uint32_t GetApplicationAudioConfigList(const int32_t handle, IStringIterator*& configList) const override {
+    uint32_t GetApplicationAudioConfigList(const int32_t handle, WPEFramework::Exchange::IDeviceSettingsAudio::IStringIterator*& configList) const override {
         ENTRY_LOG;
         configList = nullptr;
         try {
@@ -2626,7 +2626,7 @@ public:
                 return WPEFramework::Core::ERROR_GENERAL;
             }
 
-            std::vector<string> configurations;
+            std::vector<std::string> configurations;
             const size_t capacity = sizeof(halConfigList.config) / sizeof(halConfigList.config[0]);
             const size_t count = (halConfigList.returnedCount < capacity) ? halConfigList.returnedCount : capacity;
             configurations.reserve(count);
@@ -2634,8 +2634,8 @@ public:
 		    configurations.emplace_back(halConfigList.config[index].configName);
             }
 
-            using ApplicationConfigIterator = WPEFramework::RPC::IteratorType<string, RPC::ID_STRINGITERATOR>;
-            configList = WPEFramework::Core::Service<ApplicationConfigIterator>::Create<RPC::ID_STRINGITERATOR>(configurations);
+            using ApplicationConfigIterator = WPEFramework::RPC::IteratorType<WPEFramework::Exchange::IDeviceSettingsAudio::IStringIterator>;
+            configList = WPEFramework::Core::Service<ApplicationConfigIterator>::Create<WPEFramework::Exchange::IDeviceSettingsAudio::IStringIterator>(configurations);
         } catch (...) {
             DSLOG_ERR("Exception in GetApplicationAudioConfigList");
             return WPEFramework::Core::ERROR_GENERAL;
