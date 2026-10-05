@@ -49,7 +49,10 @@ DSPwrEventListener* DSPwrEventListener::_instance = nullptr;
 
 DSPwrEventListener::DSPwrEventListener()
     : _pwrEventHandlerThreadID(0)
+    , _pwrConnectThreadID(0)
     , _stopThread(false)
+    , _initialized(false)
+    , _pwrConnectThreadStarted(false)
     , _registeredPowerEventHandler(false)
     , _curState(PowerState::POWER_STATE_STANDBY)
     , _pwrMgrNotification(*this)
@@ -251,6 +254,7 @@ void DSPwrEventListener::Init(PluginHost::IShell* service)
     if (pthread_create(&_pwrEventHandlerThreadID, NULL, PwrEventHandlingThreadFunc, this) != 0) {
         DSLOG_ERR("DSMgr PwrEventHandlingThread creation failed");
     }
+    _initialized = true;
 
     // Initialize PowerManager connection using retry pattern (like original dsMgr)
     DSLOG_INFO("DSMgr PowerManager Connect setup in a Thread");
@@ -261,20 +265,30 @@ void DSPwrEventListener::Deinit()
 {
     DSLOG_INFO("Entering");
 
-    if (_powerManagerPlugin) {
-        _powerManagerPlugin->Unregister(_pwrMgrNotification.baseInterface<Exchange::IPowerManager::IModeChangedNotification>());
-        _powerManagerPlugin.Reset();
+    if (!_initialized) {
+        return;
     }
-    _registeredPowerEventHandler = false;
+
+    _stopThread = true;
 
     pthread_mutex_lock(&_pwrEventMutexLock);
-    _stopThread = true;
     pthread_cond_signal(&_pwrEventMutexCond);
     pthread_mutex_unlock(&_pwrEventMutexLock);
 
     DSLOG_INFO("Before joining thread");
     pthread_join(_pwrEventHandlerThreadID, NULL);
     DSLOG_INFO("Completed joining thread");
+
+    if (_pwrConnectThreadStarted) {
+        pthread_join(_pwrConnectThreadID, NULL);
+        _pwrConnectThreadStarted = false;
+    }
+
+    if (_powerManagerPlugin) {
+        _powerManagerPlugin->Unregister(_pwrMgrNotification.baseInterface<Exchange::IPowerManager::IModeChangedNotification>());
+        _powerManagerPlugin.Reset();
+    }
+    _registeredPowerEventHandler = false;
 
     pthread_mutex_lock(&_pwrEventQueueMutexLock);
     while (!_pwrEventQueue.empty()) {
@@ -290,6 +304,8 @@ void DSPwrEventListener::Deinit()
         _service->Release();
         _service = nullptr;
     }
+
+    _initialized = false;
 }
 
 void DSPwrEventListener::InitializePowerManager()
@@ -353,14 +369,10 @@ void DSPwrEventListener::onPowerModeChanged(const PowerState currentState, const
 void DSPwrEventListener::PwrCtrlEstablishConnection()
 {
     DSLOG_INFO("Entering");
-    
-    // Start retry thread for PowerManager connection (like original dsMgr pattern)
-    pthread_t pwrConnectThreadID;
-    
-    if (pthread_create(&pwrConnectThreadID, NULL, PwrRetryEstablishConnThread, this) == 0) {
-        if (pthread_detach(pwrConnectThreadID) != 0) {
-            DSLOG_ERR("DSPwrEventListener PwrCtrlEstablishConnection Thread detach Failed");
-        }
+
+    // Keep this thread joinable so it cannot outlive the listener or its DeviceSettings interfaces.
+    if (pthread_create(&_pwrConnectThreadID, NULL, PwrRetryEstablishConnThread, this) == 0) {
+        _pwrConnectThreadStarted = true;
     } else {
         DSLOG_ERR("DSPwrEventListener PwrCtrlEstablishConnection Thread Creation Failed");
     }
@@ -770,7 +782,7 @@ void* WPEFramework::Plugin::DSPwrEventListener::PwrRetryEstablishConnThread(void
     DSLOG_INFO("Entry");
     DSPwrEventListener* listener = static_cast<DSPwrEventListener*>(arg);
     
-    while (true) {
+    while (!listener->_stopThread) {
         // Check if PowerManager connection is successful
         if (listener->_powerManagerPlugin && listener->_registeredPowerEventHandler) {
             DSLOG_INFO("PowerManager connection is success");
@@ -779,7 +791,9 @@ void* WPEFramework::Plugin::DSPwrEventListener::PwrRetryEstablishConnThread(void
         } else {
             // Retry PowerManager initialization after delay
             usleep(DSMGR_PWR_CNTRL_CONNECT_WAIT_TIME_MS);
-            listener->InitializePowerManager();
+            if (!listener->_stopThread) {
+                listener->InitializePowerManager();
+            }
         }
     }
     DSLOG_INFO("Completed Exit");
