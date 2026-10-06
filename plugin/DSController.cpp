@@ -61,6 +61,11 @@ static inline guint g_timeout_add_seconds(guint interval, gboolean (*function)(g
 static inline gboolean g_source_remove(guint tag) { return FALSE; }
 #endif
 
+// DS HAL function declarations
+/*extern "C" {
+    bool dsGetHDMIDDCLineStatus(void);
+}*/
+
 using namespace std;
 
 namespace WPEFramework {
@@ -496,12 +501,6 @@ namespace Plugin {
             return;
         }
         
-        // dsMgr.c _SetResolution(): decide whether to trust the persisted resolution this
-        // cycle (bootup, or the EDID just changed) versus the platform's live-reported value.
-        bool hotplugEdidDiff = DumpEdidOnChecksumDiff(nullptr);
-        bool toPersist = _bootupFlagEnabled || hotplugEdidDiff;
-        DSLOG_INFO("toPersist=%d (bootupFlagEnabled=%d, hotplugEdidDiff=%d)", toPersist, _bootupFlagEnabled, hotplugEdidDiff);
-        
         // Get the User Persisted Resolution Based on Handle
         VideoPortResolution presolution;
         if (_deviceSettings) {
@@ -512,25 +511,7 @@ namespace Plugin {
             }
         }
         
-        DSLOG_INFO("Got %s Resolution - %s", toPersist ? "User Persisted" : "Platform", presolution.name.c_str());
-
-        // Platform-supported resolution list for this port (dsMgr.c pResolutions/kResolutions),
-        // used to validate candidates below instead of assuming EDID support implies platform support.
-        std::set<std::string> platformSupportedNames;
-        if (_deviceSettings) {
-            IVideoPortResolutionIterator* platformResList = nullptr;
-            if (_deviceSettings->GetVideoPortResolutionConfig(static_cast<VideoPortType>(portType), platformResList) == Core::ERROR_NONE
-                    && platformResList != nullptr) {
-                VideoPortResolution r;
-                while (platformResList->Next(r)) {
-                    if (!r.name.empty()) platformSupportedNames.insert(r.name);
-                }
-                platformResList->Release();
-            }
-        }
-        auto isResInPlatform = [&](const std::string& name) -> bool {
-            return !name.empty() && platformSupportedNames.count(name) > 0;
-        };
+        DSLOG_INFO("Got User Persisted Resolution - %s", presolution.name.c_str());
         
         if (portType == dsVIDEOPORT_TYPE_HDMI) {
             // Get The Display Handle
@@ -634,58 +615,13 @@ namespace Plugin {
                                 }
                             }
                         }
-
-                        // The persisted resolution does not match TV or platform lists.
-                        // Force the platform default resolution (dsMgr.c defaultResIndex fallback).
-                        if (!isValidResolution && isResInEdid(RESOLUTION_BASE_HD)) {
-                            presolution.name = RESOLUTION_BASE_HD;
-                            isValidResolution = true;
-                            DSLOG_INFO("Falling back to Default Platform Resolution - %s", RESOLUTION_BASE_HD);
-                        }
-
-                        // Take 480p if both above cases fail.
-                        if (!isValidResolution && isResInEdid("480p")) {
-                            presolution.name = "480p";
-                            isValidResolution = true;
-                            DSLOG_INFO("Defaulting to 480p Resolution");
-                        }
-
-                        // Boot with any resolution supported by both TV (EDID) and platform.
-                        if (!isValidResolution) {
-                            for (const auto& name : edidSupportedNames) {
-                                if (isResInPlatform(name)) {
-                                    presolution.name = name;
-                                    isValidResolution = true;
-                                    DSLOG_INFO("Boot with TV+Platform Supported Resolution - %s", name.c_str());
-                                    break;
-                                }
-                            }
-                        }
                     }
                 }
             }
         } else if (portType == dsVIDEOPORT_TYPE_COMPONENT || portType == dsVIDEOPORT_TYPE_BB || portType == dsVIDEOPORT_TYPE_RF) {
-            // Set the Component / Composite Resolution - validate against the platform-supported list
-            // instead of assuming the persisted value is always valid.
+            // Set the Component / Composite Resolution
             DSLOG_INFO("Setting resolution for non-HDMI port type: %d", portType);
-            isValidResolution = isResInPlatform(presolution.name);
-            if (!isValidResolution && !platformSupportedNames.empty()) {
-                presolution.name = *platformSupportedNames.begin();
-                isValidResolution = true;
-                DSLOG_INFO("Persisted resolution not supported on platform, forcing default - %s", presolution.name.c_str());
-            }
-        }
-        
-        // If 4K support is disabled and the resolved resolution is 4K, downgrade to the
-        // platform default (720p) - dsMgr.c res_4K_override check.
-        if (isValidResolution && _deviceSettings) {
-            bool forceDisable4K = false;
-            if (_deviceSettings->GetForceDisable4K(handle, forceDisable4K) == Core::ERROR_NONE && forceDisable4K) {
-                if (presolution.name.compare(0, 4, "2160") == 0) {
-                    DSLOG_INFO("User persisted 4K resolution. Now limiting to default (720p) as 4K support is disabled.");
-                    presolution.name = RESOLUTION_BASE_HD;
-                }
-            }
+            isValidResolution = true; // Assume valid for component/composite
         }
         
         // Set The Video Port Resolution if valid
@@ -702,29 +638,6 @@ namespace Plugin {
         
     }
 
-    // dsMgr.c uses _dsGetAudioTypeConfigs() to discover audio port types dynamically
-    // instead of a hardcoded list, so newly configured ports are picked up automatically.
-    std::vector<AudioPortType> DSController::GetSupportedAudioPortTypes()
-    {
-        std::vector<AudioPortType> portTypes;
-
-        if (_deviceSettings) {
-            Exchange::IDeviceSettings::DeviceSettingConfigs configs;
-            if (_deviceSettings->GetDeviceSettingConfigs(configs) == Core::ERROR_NONE) {
-                for (const auto& cfg : configs.audioPorts) {
-                    portTypes.push_back(static_cast<AudioPortType>(cfg.audioPortType));
-                }
-            }
-        }
-
-        if (portTypes.empty()) {
-            DSLOG_WARN("No audio port config found, falling back to default port types");
-            portTypes = {AudioPortType::AUDIO_PORT_TYPE_SPDIF, AudioPortType::AUDIO_PORT_TYPE_HDMI, AudioPortType::AUDIO_PORT_TYPE_SPEAKER};
-        }
-
-        return portTypes;
-    }
-
     void DSController::SetAudioMode()
     {
         
@@ -738,9 +651,11 @@ namespace Plugin {
             return;
         }
         
-        std::vector<AudioPortType> supportedPortTypes = GetSupportedAudioPortTypes();
+        // Get supported audio port types - for now use common types
+        AudioPortType supportedPortTypes[] = {AudioPortType::AUDIO_PORT_TYPE_SPDIF, AudioPortType::AUDIO_PORT_TYPE_HDMI, AudioPortType::AUDIO_PORT_TYPE_SPEAKER};
+        int numPorts = sizeof(supportedPortTypes) / sizeof(supportedPortTypes[0]);
         
-        for (size_t i = 0; i < supportedPortTypes.size(); i++) {
+        for (int i = 0; i < numPorts; i++) {
             int32_t handle = 0;
             uint32_t result = _deviceSettings->GetAudioPort(supportedPortTypes[i], 0, handle);
             if (result != Core::ERROR_NONE || handle == 0) {
@@ -804,9 +719,11 @@ namespace Plugin {
             return;
         }
         
-        std::vector<AudioPortType> supportedPortTypes = GetSupportedAudioPortTypes();
+        // Get supported audio port types - for now use common types
+        AudioPortType supportedPortTypes[] = {AudioPortType::AUDIO_PORT_TYPE_SPDIF, AudioPortType::AUDIO_PORT_TYPE_HDMI, AudioPortType::AUDIO_PORT_TYPE_SPEAKER};
+        int numPorts = sizeof(supportedPortTypes) / sizeof(supportedPortTypes[0]);
         
-        for (size_t i = 0; i < supportedPortTypes.size(); i++) {
+        for (int i = 0; i < numPorts; i++) {
             int32_t handle = 0;
             uint32_t result = _deviceSettings->GetAudioPort(supportedPortTypes[i], 0, handle);
             if (result != Core::ERROR_NONE || handle == 0) {
@@ -990,33 +907,17 @@ namespace Plugin {
     {
         bool supported = false;
         dsVideoPortResolution_t *setResn = NULL;
-        (void)pNumResolutions;
         
         for (int i = numResolutions - 1; i >= 0; i--) {
             setResn = &(edidData->suppResolutionList[i]);
             if (strcmp(setResn->name, Resn) == 0) {
-                // dsMgr.c also validates the EDID match against the platform-supported list.
-                bool platformSupported = false;
-                if (_instance && _instance->_deviceSettings) {
-                    IVideoPortResolutionIterator* platformResList = nullptr;
-                    if (_instance->_deviceSettings->GetVideoPortResolutionConfig(VideoPortType::DS_VIDEO_PORT_TYPE_HDMI, platformResList) == Core::ERROR_NONE
-                            && platformResList != nullptr) {
-                        VideoPortResolution r;
-                        while (platformResList->Next(r)) {
-                            if (r.name == Resn) {
-                                platformSupported = true;
-                                break;
-                            }
-                        }
-                        platformResList->Release();
-                    }
-                }
-                if (platformSupported) {
-                    DSLOG_INFO("Resolution supported in EDID and platform: %s", Resn);
-                    supported = true;
-                    *index = i;
-                    break;
-                }
+                // Check if platform supports this resolution
+                // Note: kResolutions would need to be defined or passed as parameter
+                // For now, we'll mark as supported if found in EDID
+                DSLOG_INFO("Resolution supported in EDID: %s", Resn);
+                supported = true;
+                *index = i;
+                break;
             }
         }
         
@@ -1062,21 +963,7 @@ namespace Plugin {
                     
                     if ((cached_EDID_checksum == 0) || (current_EDID_checksum != cached_EDID_checksum)) {
                         cached_EDID_checksum = current_EDID_checksum;
-                        DSLOG_INFO("HDMI-EDID Dump BEGIN>>>>>>>>>>>>>>");
-                        char hexLine[64];
-                        int linePos = 0;
-                        for (int i = 0; i < length; i++) {
-                            if (i != 0 && (i % 16 == 0)) {
-                                DSLOG_INFO("%s", hexLine);
-                                linePos = 0;
-                            }
-                            linePos += snprintf(hexLine + linePos, sizeof(hexLine) - linePos, "%02X ", edidBytes[i]);
-                        }
-                        if (linePos > 0) {
-                            DSLOG_INFO("%s", hexLine);
-                        }
-                        DSLOG_INFO("HDMI-EDID Dump END>>>>>>>>>>>>>>");
-                        return true;
+                        DSLOG_INFO("HDMI-EDID Dump detected changes");
                     }
                 }
             }
@@ -1206,7 +1093,7 @@ namespace Plugin {
         } else if (hdcpStatus == dsHDCP_STATUS_AUTHENTICATIONFAILURE) {
             DSLOG_ERR("Changed status to HDCP Authentication Fail !!!!!!!!");
             HDCPeventData.data.systemStates.state = 0;
-            SetBackgroundColor(dsVIDEO_BGCOLOR_NONE);
+            SetBackgroundColor(dsVIDEO_BGCOLOR_BLUE);
             _hdcpAuthenticated = false;
             if (!_ignoreEdid) {
                 SetVideoPortResolution();

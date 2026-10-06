@@ -59,6 +59,7 @@ namespace dAudio {
 
         // Audio Platform interface methods - all pure virtual
         virtual uint32_t GetAudioPort(const AudioPortType type, const int32_t index, int32_t &handle) = 0;
+        // GetAudioPorts and GetSupportedAudioPorts methods removed - iterator type doesn't exist in interface
         virtual uint32_t GetAudioCapabilities(const int32_t handle, int32_t &capabilities) = 0;
         virtual uint32_t GetAudioMS12Capabilities(const int32_t handle, int32_t &capabilities) = 0;
 

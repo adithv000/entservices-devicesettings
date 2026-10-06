@@ -30,7 +30,6 @@
 #include <utility>
 #include <pthread.h>
 #include <cstdlib>
-#include <vector>
 
 #include <com/com.h>
 #include <core/core.h>
@@ -162,7 +161,6 @@ namespace Plugin {
         void SetResolution(int32_t handle, dsVideoPortType_t portType);
         void SetAudioMode();
         void SetEASAudioMode();
-        std::vector<AudioPortType> GetSupportedAudioPortTypes();
         void SetBackgroundColor(dsVideoBackgroundColor_t color);
         void DumpHdmiEdidInfo(const DisplayEDID& edidData);
         void ScheduleEdidDump();
@@ -173,6 +171,7 @@ namespace Plugin {
         int32_t GetVideoPortHandle(dsVideoPortType_t port);
         bool IsHDMIConnected();
         bool isComponentPortPresent();
+        bool dsGetHDMIDDCLineStatus();
         
         static void setupPlatformConfig();
         static bool isEUPlatform();
