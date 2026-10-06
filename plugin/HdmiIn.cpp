@@ -50,7 +50,7 @@ void HdmiIn::Platform_init()
         this->OnHDMIInStatusEvent(port, isConnected);
     };
     bundle.OnHDMIInVideoModeUpdateEvent = [this](HDMIInPort port, HDMIVideoPortResolution videoPortResolution) {
-        this->OnHDMIInVideoModeUpdateEvent(port, videoPortResolution);
+        this->OnHDMIInVideoModeUpdateEvent(port, std::move(videoPortResolution));
     };
     bundle.OnHDMIInAllmStatusEvent = [this](HDMIInPort port, bool allmStatus) {
         this->OnHDMIInAllmStatusEvent(port, allmStatus);
@@ -85,9 +85,9 @@ void HdmiIn::OnHDMIInStatusEvent(const HDMIInPort activePort, const bool isPrese
     _parent.OnHDMIInEventStatusNotification(activePort, isPresented);
 }
 
-void HdmiIn::OnHDMIInVideoModeUpdateEvent(const HDMIInPort port, const HDMIVideoPortResolution videoPortResolution)
+void HdmiIn::OnHDMIInVideoModeUpdateEvent(const HDMIInPort port, HDMIVideoPortResolution videoPortResolution)
 {
-    _parent.OnHDMIInVideoModeUpdateNotification(port, videoPortResolution);
+    _parent.OnHDMIInVideoModeUpdateNotification(port, std::move(videoPortResolution));
 }
 
 void HdmiIn::OnHDMIInAllmStatusEvent(const HDMIInPort port, const bool allmStatus)

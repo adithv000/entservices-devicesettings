@@ -103,7 +103,7 @@ public:
     void OnHDMIInHotPlugEvent(const HDMIInPort port, const bool isConnected);
     void OnHDMIInSignalStatusEvent(const HDMIInPort port, const HDMIInSignalStatus signalStatus);
     void OnHDMIInStatusEvent(const HDMIInPort activePort, const bool isPresented);
-    void OnHDMIInVideoModeUpdateEvent(const HDMIInPort port, const HDMIVideoPortResolution videoPortResolution);
+    void OnHDMIInVideoModeUpdateEvent(const HDMIInPort port, HDMIVideoPortResolution videoPortResolution);
     void OnHDMIInAllmStatusEvent(const HDMIInPort port, const bool allmStatus);
     void OnHDMIInAVIContentTypeEvent(const HDMIInPort port, const HDMIInAviContentType aviContentType);
     void OnHDMIInAVLatencyEvent(const int32_t audioDelay, const int32_t videoDelay);

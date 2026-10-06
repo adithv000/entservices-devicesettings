@@ -52,8 +52,8 @@ void CompositeIn::Platform_init()
     bundle.OnCompositeInStatus = [this](const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort activePort, const bool isPresented) {
         this->OnCompositeInStatus(activePort, isPresented);  // Call public method (matches other components)
     };
-    bundle.OnCompositeInVideoModeUpdate = [this](const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort activePort, const WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution videoResolution) {
-        this->OnCompositeInVideoModeUpdate(activePort, videoResolution);  // Call public method (matches other components)
+    bundle.OnCompositeInVideoModeUpdate = [this](const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort activePort, WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution videoResolution) {
+        this->OnCompositeInVideoModeUpdate(activePort, std::move(videoResolution));  // Call public method (matches other components)
     };
     
     if (_platform) {
@@ -144,9 +144,9 @@ void CompositeIn::OnCompositeInStatus(const WPEFramework::Exchange::IDeviceSetti
     _parent.OnCompositeInStatus(activePort, isPresented);
 }
 
-void CompositeIn::OnCompositeInVideoModeUpdate(const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort activePort, const WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution videoResolution)
+void CompositeIn::OnCompositeInVideoModeUpdate(const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort activePort, WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution videoResolution)
 {
     DSLOG_INFO("CompositeIn OnCompositeInVideoModeUpdate event: activePort=%d", static_cast<int>(activePort));
-    _parent.OnCompositeInVideoModeUpdate(activePort, videoResolution);
+    _parent.OnCompositeInVideoModeUpdate(activePort, std::move(videoResolution));
 }
 

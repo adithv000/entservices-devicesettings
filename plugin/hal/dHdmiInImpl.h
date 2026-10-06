@@ -29,6 +29,7 @@
 #include <functional>
 #include <iostream>
 #include <cstring>
+#include <utility>
 
 #include "dHdmiIn.h"
 #include "dsHdmiIn.h"
@@ -291,7 +292,7 @@ public:
                         break;
                 }
             // Whenever there is a change in edid version to 2.0, ensure the edid allm support and edid vrr support is updated with latest value
-        if(iEdidVersion == HDMI_EDID_VER_20)
+        if(iEdidVersion == HDMI_EDID_VER_20 && iHdmiPort >= dsHDMI_IN_PORT_0 && iHdmiPort < dsHDMI_IN_PORT_MAX)
             {
             DSLOG_INFO("As the version is changed to 2.0, we are updating the allm bit and the vrr bit in edid");
             setEdid2AllmSupport(iHdmiPort,m_edidallmsupport[iHdmiPort]);
@@ -423,7 +424,7 @@ public:
         return eRet;
     }
 
-    void setAllCallbacks(const CallbackBundle bundle) override
+    void setAllCallbacks(const CallbackBundle& bundle) override
     {
         ENTRY_LOG;
         DSLOG_INFO(" profileType %d", profileType);
@@ -757,7 +758,7 @@ public:
             res.stereoScopicMode  = static_cast<HDMIInVideoStereoScopicMode>(videoPortResolution.stereoScopicMode);
             res.frameRate         = static_cast<HDMIInVideoFrameRate>(videoPortResolution.frameRate);
             res.interlaced        = videoPortResolution.interlaced;
-            g_HdmiInVideoModeUpdateCallback(static_cast<HDMIInPort>(port), res);
+            g_HdmiInVideoModeUpdateCallback(static_cast<HDMIInPort>(port), std::move(res));
         }
     }
 

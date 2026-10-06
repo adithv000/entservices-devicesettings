@@ -135,7 +135,7 @@ public:
 
     // Audio Persistence Configuration
     uint32_t GetAudioEnablePersist(const int32_t handle, bool &enabled, std::string &portName);
-    uint32_t SetAudioEnablePersist(const int32_t handle, const bool enable, const std::string portName);
+    uint32_t SetAudioEnablePersist(const int32_t handle, const bool enable, const std::string& portName);
 
     // Audio Decoder Status
     uint32_t IsAudioMSDecoded(const int32_t handle, bool &hasms11Decode);
@@ -204,7 +204,7 @@ public:
     uint32_t SetAudioMixerLevels(const int32_t handle, const AudioInput audioInput, const int32_t volume);
 
     // MS12 Settings Override
-    uint32_t SetAudioMS12SettingsOverride(const int32_t handle, const std::string& profileName, const std::string& profileSettingsName, const std::string& profileSettingValue, const std::string profileState);
+    uint32_t SetAudioMS12SettingsOverride(const int32_t handle, const std::string& profileName, const std::string& profileSettingsName, const std::string& profileSettingValue, const std::string& profileState);
 
     // Reset Functions
     uint32_t ResetAudioDialogEnhancement(const int32_t handle);
