@@ -2270,7 +2270,7 @@ private:
                     device::HostPersistence::getInstance().persistHostProperty("COMPONENT0.resolution", resolutionName);
                 #endif
                 DSLOG_INFO("Persisted Component resolution: %s", resolutionName.c_str());
-                _dsCompResolution = resolutionName;
+                _dsCompResolution = std::move(resolutionName);
                 
                 if (!IsCompatibleResolution(resolution.pixelResolution, getPixelResolutionByName(_dsHDMIResolution))) {
                     DSLOG_INFO("HDMI Resolution is not Compatible with Analog ports");
@@ -2304,7 +2304,7 @@ private:
                 if (!IsCompatibleResolution(resolution.pixelResolution, getPixelResolutionByName(_dsHDMIResolution))) {
                     std::string compatibleResolution = getCompatibleHDMIResolution(resolution);
                     DSLOG_INFO("New Compatible resolution is %s", compatibleResolution.c_str());
-                    _dsHDMIResolution = compatibleResolution;
+                    _dsHDMIResolution = std::move(compatibleResolution);
                 }
             }
             
