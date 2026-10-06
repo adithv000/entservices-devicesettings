@@ -24,6 +24,7 @@
 #include <iostream>
 #include <functional>
 #include <string>
+#include <utility>
 #include "dCompositeIn.h"
 #include "dsCompositeIn.h"
 #include "dsError.h"
@@ -360,10 +361,10 @@ public:
         return static_cast<CompositeInSignalStatus>(signalStatus);
     }
 
-    static WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution convertToWPEDisplayVideoPortResolution(const DisplayVideoPortResolution resolution)
+    static WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution convertToWPEDisplayVideoPortResolution(DisplayVideoPortResolution resolution)
     {
         WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution wpeResolution;
-        wpeResolution.name = resolution.name;
+        wpeResolution.name = std::move(resolution.name);
         wpeResolution.pixelResolution = static_cast<WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayTVResolution>(resolution.pixelResolution);
         wpeResolution.aspectRatio = static_cast<WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoAspectRatio>(resolution.aspectRatio);
         wpeResolution.frameRate = static_cast<WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayInVideoFrameRate>(resolution.frameRate);
@@ -511,8 +512,8 @@ private:
             halResolution.frameRate = static_cast<DisplayInVideoFrameRate>(videoResolution.frameRate);
             halResolution.interlaced = videoResolution.interlaced;
             
-            WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution wpeResolution = convertToWPEDisplayVideoPortResolution(halResolution);
-            g_CompositeInVideoModeUpdateCallback(wpePort, wpeResolution);
+            WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution wpeResolution = convertToWPEDisplayVideoPortResolution(std::move(halResolution));
+            g_CompositeInVideoModeUpdateCallback(wpePort, std::move(wpeResolution));
         }
     }
 };

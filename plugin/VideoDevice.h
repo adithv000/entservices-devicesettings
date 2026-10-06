@@ -74,12 +74,12 @@ public:
     uint32_t SetFRFMode(const int32_t handle, const int32_t frfmode);
     uint32_t GetFRFMode(const int32_t handle, int32_t &frfmode);
     uint32_t GetCurrentDisplayFrameRate(const int32_t handle, string &framerate);
-    uint32_t SetDisplayFrameRate(const int32_t handle, const string framerate);
+    uint32_t SetDisplayFrameRate(const int32_t handle, string framerate);
 
     // VideoDevice event handling methods - Called by DS HAL to forward events to parent
     void OnZoomSettingsChanged(const VideoDeviceZoom zoomSetting);
-    void OnDisplayFrameratePreChange(const string frameRate);
-    void OnDisplayFrameratePostChange(const string frameRate);
+    void OnDisplayFrameratePreChange(string frameRate);
+    void OnDisplayFrameratePostChange(string frameRate);
 
     template <typename IMPL = DefaultImpl, typename... Args>
     static VideoDevice Create(INotification& parent, Args&&... args)

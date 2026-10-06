@@ -483,7 +483,7 @@ public:
         return retCode;
     }
 
-    uint32_t SetDisplayFrameRate(const int32_t handle, const string framerate) override
+    uint32_t SetDisplayFrameRate(const int32_t handle, string framerate) override
     {
         uint32_t retCode = WPEFramework::Core::ERROR_GENERAL;
         DSLOG_INFO(" handle=%d, framerate=%s", handle, framerate.c_str());
@@ -528,7 +528,7 @@ public:
         
         // Send post-change callback (skip on invalid param, matching dsVideoDevice.c broadcast guard)
         if (result != dsERR_INVALID_PARAM && g_VideoDeviceDisplayFrameratePostChangeCallback) {
-            g_VideoDeviceDisplayFrameratePostChangeCallback(framerate);
+            g_VideoDeviceDisplayFrameratePostChangeCallback(std::move(framerate));
         }
         
         return retCode;
@@ -644,7 +644,7 @@ public:
         // Call the stored global callback if available
         if (g_VideoDeviceDisplayFrameratePreChangeCallback) {
             std::string framerate = std::to_string(inputStatus);
-            g_VideoDeviceDisplayFrameratePreChangeCallback(framerate);
+            g_VideoDeviceDisplayFrameratePreChangeCallback(std::move(framerate));
         }
     }
 
@@ -655,7 +655,7 @@ public:
         // Call the stored global callback if available
         if (g_VideoDeviceDisplayFrameratePostChangeCallback) {
             std::string framerate = std::to_string(inputStatus);
-            g_VideoDeviceDisplayFrameratePostChangeCallback(framerate);
+            g_VideoDeviceDisplayFrameratePostChangeCallback(std::move(framerate));
         }
     }
 

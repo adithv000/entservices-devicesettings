@@ -54,7 +54,7 @@ namespace dVideoDevice {
         virtual uint32_t SetFRFMode(const int32_t handle, const int32_t frfmode) = 0;
         virtual uint32_t GetFRFMode(const int32_t handle, int32_t& frfmode) = 0;
         virtual uint32_t GetCurrentDisplayFrameRate(const int32_t handle, string& framerate) = 0;
-        virtual uint32_t SetDisplayFrameRate(const int32_t handle, const string framerate) = 0;
+        virtual uint32_t SetDisplayFrameRate(const int32_t handle, string framerate) = 0;
     };
 
     // CallbackBundle structure to hold all VideoDevice event callbacks

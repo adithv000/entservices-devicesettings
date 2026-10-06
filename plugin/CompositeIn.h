@@ -96,7 +96,7 @@ public:
     void OnCompositeInHotPlug(const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort port, const bool isConnected);
     void OnCompositeInSignalStatus(const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort port, const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInSignalStatus signalStatus);
     void OnCompositeInStatus(const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort activePort, const bool isPresented);
-    void OnCompositeInVideoModeUpdate(const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort activePort, const WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution videoResolution);
+    void OnCompositeInVideoModeUpdate(const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort activePort, WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution videoResolution);
     ~CompositeIn() {};
 
 };

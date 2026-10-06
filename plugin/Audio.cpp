@@ -559,7 +559,7 @@ uint32_t Audio::GetAudioEnablePersist(const int32_t handle, bool &enabled, strin
     return result;
 }
 
-uint32_t Audio::SetAudioEnablePersist(const int32_t handle, const bool enable, const string portName) {
+uint32_t Audio::SetAudioEnablePersist(const int32_t handle, const bool enable, const string& portName) {
     uint32_t result = (_platform != nullptr) ? _platform->SetAudioEnablePersist(handle, enable, portName) : WPEFramework::Core::ERROR_UNAVAILABLE;
     return result;
 }
@@ -734,7 +734,7 @@ uint32_t Audio::SetAudioMixerLevels(const int32_t handle, const AudioInput audio
     return result;
 }
 
-uint32_t Audio::SetAudioMS12SettingsOverride(const int32_t handle, const string& profileName, const string& profileSettingsName, const string& profileSettingValue, const string profileState) {
+uint32_t Audio::SetAudioMS12SettingsOverride(const int32_t handle, const string& profileName, const string& profileSettingsName, const string& profileSettingValue, const string& profileState) {
     uint32_t result = (_platform != nullptr) ? _platform->SetAudioMS12SettingsOverride(handle, profileName, profileSettingsName, profileSettingValue, profileState) : WPEFramework::Core::ERROR_UNAVAILABLE;
     return result;
 }
