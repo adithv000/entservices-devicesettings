@@ -30,7 +30,6 @@ cmake -G Ninja -S "$GITHUB_WORKSPACE" -B build/entservices-devicesettings \
     -DCMAKE_DISABLE_FIND_PACKAGE_DS=ON \
     -DCOMCAST_CONFIG=OFF \
     -DRDK_SERVICES_COVERITY=ON \
-    -DRDK_SERVICES_L1_TEST=ON \
     -DDS_FOUND=ON \
     -DHIDE_NON_EXTERNAL_SYMBOLS=OFF \
     -DWPEFrameworkHelpers_INCLUDE_DIRS="$GITHUB_WORKSPACE/install/usr/include/wpeframework/helpers" \
