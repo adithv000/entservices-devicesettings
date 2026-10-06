@@ -30,6 +30,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <unistd.h>
+#include "DeviceSettingsLogger.h" // GuardedCallback::Invoke() below uses DSLOG_ERR
 
 // RDK profile search - inlined from UtilsSearchRDKProfile
 #define RDK_PROFILE "RDK_PROFILE="
@@ -161,7 +162,6 @@ inline profile_t searchRdkProfile(void) {
 #include <interfaces/IDeviceSettingsHost.h>
 #include <interfaces/IDeviceSettingsVideoDevice.h>
 #include <interfaces/IDeviceSettingsVideoPort.h>
-#include "DeviceSettingsLogger.h"
 
 #define USE_LEGACY_INTERFACE
 
