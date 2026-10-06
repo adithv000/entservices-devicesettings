@@ -23,6 +23,7 @@
 #include <dlfcn.h>
 #include <iostream>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <utility>
 #include "dCompositeIn.h"
@@ -60,6 +61,10 @@ static std::function<void(const WPEFramework::Exchange::IDeviceSettingsComposite
 static std::function<void(const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort, const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInSignalStatus)> g_CompositeInSignalStatusCallback;
 static std::function<void(const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort, const bool)> g_CompositeInStatusCallback;
 static std::function<void(const WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort, const WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution)> g_CompositeInVideoModeUpdateCallback;
+// Guards all g_CompositeIn*Callback globals above: shared between the HAL dispatch
+// callbacks (readers/invokers) and setAllCallbacks()/constructor/destructor (writers)
+// so teardown cannot race with or interrupt an in-flight callback invocation.
+static std::mutex g_CompositeInCallbackMutex;
 
 class dCompositeInImpl : public hal::dCompositeIn::IPlatform {
 
@@ -73,23 +78,31 @@ public:
         DSLOG_INFO("Constructor");
         getInstance() = this; // Set static instance for callback access
         // Precheck: drop any callback left over from a prior (already destroyed) instance.
-        g_CompositeInHotPlugCallback = nullptr;
-        g_CompositeInSignalStatusCallback = nullptr;
-        g_CompositeInStatusCallback = nullptr;
-        g_CompositeInVideoModeUpdateCallback = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_CompositeInCallbackMutex);
+            g_CompositeInHotPlugCallback = nullptr;
+            g_CompositeInSignalStatusCallback = nullptr;
+            g_CompositeInStatusCallback = nullptr;
+            g_CompositeInVideoModeUpdateCallback = nullptr;
+        }
         InitialiseHAL();
     }
 
     virtual ~dCompositeInImpl()
     {
         DSLOG_INFO("Destructor");
-        // Clear stale global callbacks first: prevents a subsequently constructed instance's
-        // init-time HAL notification from dispatching into this (about to be destroyed) instance.
-        g_CompositeInHotPlugCallback = nullptr;
-        g_CompositeInSignalStatusCallback = nullptr;
-        g_CompositeInStatusCallback = nullptr;
-        g_CompositeInVideoModeUpdateCallback = nullptr;
+        // Quiesce the HAL first so no further asynchronous callbacks can be
+        // dispatched, then clear the global handlers below under the same lock
+        // the dispatch callbacks use, which drains any invocation already in
+        // flight before this instance is destroyed.
         DeInitialiseHAL();
+        {
+            std::lock_guard<std::mutex> lock(g_CompositeInCallbackMutex);
+            g_CompositeInHotPlugCallback = nullptr;
+            g_CompositeInSignalStatusCallback = nullptr;
+            g_CompositeInStatusCallback = nullptr;
+            g_CompositeInVideoModeUpdateCallback = nullptr;
+        }
         getInstance() = nullptr; // Clear static instance
     }
 
@@ -189,10 +202,13 @@ public:
         
         if (!compositeIn_isInitialized) {
             // Set the global callback function pointers from CallbackBundle
-            g_CompositeInHotPlugCallback = bundle.OnCompositeInHotPlug;
-            g_CompositeInSignalStatusCallback = bundle.OnCompositeInSignalStatus;
-            g_CompositeInStatusCallback = bundle.OnCompositeInStatus;
-            g_CompositeInVideoModeUpdateCallback = bundle.OnCompositeInVideoModeUpdate;
+            {
+                std::lock_guard<std::mutex> lock(g_CompositeInCallbackMutex);
+                g_CompositeInHotPlugCallback = bundle.OnCompositeInHotPlug;
+                g_CompositeInSignalStatusCallback = bundle.OnCompositeInSignalStatus;
+                g_CompositeInStatusCallback = bundle.OnCompositeInStatus;
+                g_CompositeInVideoModeUpdateCallback = bundle.OnCompositeInVideoModeUpdate;
+            }
 
             // Register HAL callbacks
             registerCompositeInEventCallbacks();
@@ -461,10 +477,15 @@ private:
     {
         DSLOG_INFO(" port=%d, isPortConnected=%s", static_cast<int>(port), isPortConnected ? "true" : "false");
         
-        if (g_CompositeInHotPlugCallback) {
+        decltype(g_CompositeInHotPlugCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_CompositeInCallbackMutex);
+            callback = g_CompositeInHotPlugCallback;
+        }
+        if (callback) {
             // Convert DS HAL type directly to WPE Framework type
             WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort wpePort = convertToWPECompositeInPort(static_cast<CompositeInPort>(port));
-            g_CompositeInHotPlugCallback(wpePort, isPortConnected);
+            callback(wpePort, isPortConnected);
         }
     }
 
@@ -472,11 +493,16 @@ private:
     {
         DSLOG_INFO(" port=%d, sigStatus=%d", static_cast<int>(port), static_cast<int>(sigStatus));
         
-        if (g_CompositeInSignalStatusCallback) {
+        decltype(g_CompositeInSignalStatusCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_CompositeInCallbackMutex);
+            callback = g_CompositeInSignalStatusCallback;
+        }
+        if (callback) {
             // Convert DS HAL types directly to WPE Framework types
             WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort wpePort = convertToWPECompositeInPort(static_cast<CompositeInPort>(port));
             WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInSignalStatus wpeSignalStatus = convertToWPECompositeInSignalStatus(static_cast<CompositeInSignalStatus>(sigStatus));
-            g_CompositeInSignalStatusCallback(wpePort, wpeSignalStatus);
+            callback(wpePort, wpeSignalStatus);
         }
     }
 
@@ -485,10 +511,15 @@ private:
         DSLOG_INFO(" activePort=%d, isPresented=%s",
                 static_cast<int>(inputStatus.activePort), inputStatus.isPresented ? "true" : "false");
         
-        if (g_CompositeInStatusCallback) {
+        decltype(g_CompositeInStatusCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_CompositeInCallbackMutex);
+            callback = g_CompositeInStatusCallback;
+        }
+        if (callback) {
             // Convert DS HAL type directly to WPE Framework type
             WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort wpePort = convertToWPECompositeInPort(static_cast<CompositeInPort>(inputStatus.activePort));
-            g_CompositeInStatusCallback(wpePort, inputStatus.isPresented);
+            callback(wpePort, inputStatus.isPresented);
         }
     }
 
@@ -499,7 +530,12 @@ private:
                 videoResolution.name, videoResolution.pixelResolution, videoResolution.aspectRatio, 
                 videoResolution.stereoScopicMode, videoResolution.frameRate);
         
-        if (g_CompositeInVideoModeUpdateCallback) {
+        decltype(g_CompositeInVideoModeUpdateCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_CompositeInCallbackMutex);
+            callback = g_CompositeInVideoModeUpdateCallback;
+        }
+        if (callback) {
             // Convert DS HAL types to WPE Framework types
             WPEFramework::Exchange::IDeviceSettingsCompositeIn::CompositeInPort wpePort = convertToWPECompositeInPort(static_cast<CompositeInPort>(port));
             
@@ -513,7 +549,7 @@ private:
             halResolution.interlaced = videoResolution.interlaced;
             
             WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution wpeResolution = convertToWPEDisplayVideoPortResolution(std::move(halResolution));
-            g_CompositeInVideoModeUpdateCallback(wpePort, std::move(wpeResolution));
+            callback(wpePort, std::move(wpeResolution));
         }
     }
 };

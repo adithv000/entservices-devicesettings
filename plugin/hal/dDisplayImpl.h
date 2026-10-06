@@ -23,6 +23,7 @@
 #include <dlfcn.h>
 #include <iostream>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -66,6 +67,10 @@ static pthread_mutex_t dsDisplayLock = PTHREAD_MUTEX_INITIALIZER;
 static std::function<void(const uint8_t, const bool)> g_DisplayRxSenseCallback;
 static std::function<void(const uint8_t, const int32_t)> g_DisplayHDCPStatusCallback;
 static std::function<void(const uint8_t, const bool)> g_DisplayHDMIHotPlugCallback;
+// Guards all g_Display*Callback globals above: shared between the HAL dispatch
+// callback (reader/invoker) and setAllCallbacks()/constructor/destructor (writers)
+// so teardown cannot race with or interrupt an in-flight callback invocation.
+static std::mutex g_DisplayCallbackMutex;
 
 class dDisplayImpl : public hal::dDisplay::IPlatform {
 
@@ -79,21 +84,29 @@ public:
         DSLOG_INFO("Constructor");
         getInstance() = this; // Set static instance for callback access
         // Precheck: drop any callback left over from a prior (already destroyed) instance.
-        g_DisplayRxSenseCallback = nullptr;
-        g_DisplayHDCPStatusCallback = nullptr;
-        g_DisplayHDMIHotPlugCallback = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_DisplayCallbackMutex);
+            g_DisplayRxSenseCallback = nullptr;
+            g_DisplayHDCPStatusCallback = nullptr;
+            g_DisplayHDMIHotPlugCallback = nullptr;
+        }
         InitialiseHAL();
     }
 
     virtual ~dDisplayImpl()
     {
         DSLOG_INFO("Destructor");
-        // Clear stale global callbacks first: prevents a subsequently constructed instance's
-        // init-time HAL notification from dispatching into this (about to be destroyed) instance.
-        g_DisplayRxSenseCallback = nullptr;
-        g_DisplayHDCPStatusCallback = nullptr;
-        g_DisplayHDMIHotPlugCallback = nullptr;
+        // Stop the HAL first so no further asynchronous callbacks can be
+        // dispatched, then clear the global handlers below under the same lock
+        // the dispatch callback uses, which drains any invocation already in
+        // flight before this instance is destroyed.
         DeInitialiseHAL();
+        {
+            std::lock_guard<std::mutex> lock(g_DisplayCallbackMutex);
+            g_DisplayRxSenseCallback = nullptr;
+            g_DisplayHDCPStatusCallback = nullptr;
+            g_DisplayHDMIHotPlugCallback = nullptr;
+        }
         getInstance() = nullptr; // Clear static instance
     }
 
@@ -156,9 +169,12 @@ public:
         
         if (!display_isInitialized) {
             // Set the global callback function pointers
-            g_DisplayRxSenseCallback = bundle.OnDisplayRxSense;
-            g_DisplayHDCPStatusCallback = bundle.OnDisplayHDCPStatus;
-            g_DisplayHDMIHotPlugCallback = bundle.OnDisplayHDMIHotPlug;
+            {
+                std::lock_guard<std::mutex> lock(g_DisplayCallbackMutex);
+                g_DisplayRxSenseCallback = bundle.OnDisplayRxSense;
+                g_DisplayHDCPStatusCallback = bundle.OnDisplayHDCPStatus;
+                g_DisplayHDMIHotPlugCallback = bundle.OnDisplayHDMIHotPlug;
+            }
 
             // Register HAL callbacks
             registerDisplayEventCallbacks();
@@ -785,17 +801,24 @@ private:
 
         uint8_t port = static_cast<uint8_t>(handle & 0xFF); // Extract port from handle
 
+        decltype(g_DisplayRxSenseCallback) rxSenseCallback;
+        decltype(g_DisplayHDMIHotPlugCallback) hotPlugCallback;
+        {
+            std::lock_guard<std::mutex> lock(g_DisplayCallbackMutex);
+            rxSenseCallback = g_DisplayRxSenseCallback;
+            hotPlugCallback = g_DisplayHDMIHotPlugCallback;
+        }
         switch (dsDisplayEvent) {
             case dsDISPLAY_RXSENSE_ON: // DS_DISPLAY_RXSENSE_ON equivalent
-                if (g_DisplayRxSenseCallback) {
-                    g_DisplayRxSenseCallback(port, true);
+                if (rxSenseCallback) {
+                    rxSenseCallback(port, true);
                 }
                 break;
                 
             case dsDISPLAY_RXSENSE_OFF: // DS_DISPLAY_RXSENSE_OFF equivalent  
                 TELEMETRY_EVENT_INT("HDMI_INFO_tv_off", 1);
-                if (g_DisplayRxSenseCallback) {
-                    g_DisplayRxSenseCallback(port, false);
+                if (rxSenseCallback) {
+                    rxSenseCallback(port, false);
                 }
                 break;
                 
@@ -818,8 +841,8 @@ private:
                 // current sink capabilities before announcing connected state.
                 dVideoPortImpl::ApplyPreferredColorDepthAfterHdmiReset();
                 _dsSyncHdmiStatus(DS_HDMI_TAG_HOTPLUP, dsDISPLAY_EVENT_CONNECTED);
-                if (g_DisplayHDMIHotPlugCallback) {
-                    g_DisplayHDMIHotPlugCallback(port, true);
+                if (hotPlugCallback) {
+                    hotPlugCallback(port, true);
                 }
                 break;
                 
@@ -835,8 +858,8 @@ private:
                 pthread_mutex_unlock(&dsDisplayLock);
                 DSLOG_INFO(" DISCONNECTED — EDID caches invalidated");
                 _dsSyncHdmiStatus(DS_HDMI_TAG_HOTPLUP, dsDISPLAY_EVENT_DISCONNECTED);
-                if (g_DisplayHDMIHotPlugCallback) {
-                    g_DisplayHDMIHotPlugCallback(port, false);
+                if (hotPlugCallback) {
+                    hotPlugCallback(port, false);
                 }
                 break;
                 

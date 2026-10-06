@@ -146,7 +146,16 @@ namespace Plugin {
 
     DeviceSettingsImp::~DeviceSettingsImp() {
         DSLOG_INFO("Destructor - Instance Address: %p", this);
-        
+
+        // Tear down DSController FIRST: its destructor stops/joins the power-event
+        // listener's retry thread (PwrControllerFetchNinitStateValues() et al. touch
+        // the component implementations below). Deleting the components before this
+        // thread is joined would let it run against already-destroyed components.
+        if (_dsController != nullptr) {
+            delete _dsController;
+            _dsController = nullptr;
+        }
+
         // Clean up created implementation instances
         if (_fpdSettings != nullptr) {
             delete _fpdSettings;
@@ -182,12 +191,6 @@ namespace Plugin {
         if (_compositeInSettings != nullptr) {
             delete _compositeInSettings;
             _compositeInSettings = nullptr;
-        }
-        
-        // Clean up DSController last as it provides system infrastructure
-        if (_dsController != nullptr) {
-            delete _dsController;
-            _dsController = nullptr;
         }
 
         DeviceSettingsHALLoader::ReleaseAllLibraries();

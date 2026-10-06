@@ -370,7 +370,9 @@ void DSPwrEventListener::PwrCtrlEstablishConnection()
 {
     DSLOG_INFO("Entering");
 
-    // Keep this thread joinable so it cannot outlive the listener or its DeviceSettings interfaces.
+    // Joinable, and joined by Deinit() before the components it touches are torn down:
+    // DeviceSettingsImp::~DeviceSettingsImp() destroys DSController (which Deinit()s/joins
+    // this listener) before deleting the component implementations.
     if (pthread_create(&_pwrConnectThreadID, NULL, PwrRetryEstablishConnThread, this) == 0) {
         _pwrConnectThreadStarted = true;
     } else {

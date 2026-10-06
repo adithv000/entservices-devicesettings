@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cctype>
 #include <functional>
+#include <mutex>
 #include <iostream>
 #include <cstring>
 #include <dlfcn.h>
@@ -52,6 +53,10 @@ static bool force_disable_hdr = true;
 static std::function<void(const VideoDeviceZoom)> g_VideoDeviceZoomSettingsChangedCallback;
 static std::function<void(const string)> g_VideoDeviceDisplayFrameratePreChangeCallback;
 static std::function<void(const string)> g_VideoDeviceDisplayFrameratePostChangeCallback;
+// Guards all g_VideoDevice*Callback globals above: shared between the HAL dispatch
+// callbacks (readers/invokers) and setAllCallbacks()/constructor/destructor (writers)
+// so teardown cannot race with or interrupt an in-flight callback invocation.
+static std::mutex g_VideoDeviceCallbackMutex;
 
 class dVideoDeviceImpl : public hal::dVideoDevice::IPlatform {
 
@@ -64,21 +69,29 @@ public:
     {
         DSLOG_INFO("Constructor");
         // Precheck: drop any callback left over from a prior (already destroyed) instance.
-        g_VideoDeviceZoomSettingsChangedCallback = nullptr;
-        g_VideoDeviceDisplayFrameratePreChangeCallback = nullptr;
-        g_VideoDeviceDisplayFrameratePostChangeCallback = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_VideoDeviceCallbackMutex);
+            g_VideoDeviceZoomSettingsChangedCallback = nullptr;
+            g_VideoDeviceDisplayFrameratePreChangeCallback = nullptr;
+            g_VideoDeviceDisplayFrameratePostChangeCallback = nullptr;
+        }
         InitialiseHAL();
     }
 
     virtual ~dVideoDeviceImpl()
     {
         DSLOG_ERR("Destructor");
-        // Clear stale global callbacks first: prevents a subsequently constructed instance's
-        // init-time HAL notification from dispatching into this (about to be destroyed) instance.
-        g_VideoDeviceZoomSettingsChangedCallback = nullptr;
-        g_VideoDeviceDisplayFrameratePreChangeCallback = nullptr;
-        g_VideoDeviceDisplayFrameratePostChangeCallback = nullptr;
+        // Terminate the HAL first so no further asynchronous callbacks can be
+        // dispatched, then clear the global handlers below under the same lock
+        // the dispatch callbacks use, which drains any invocation already in
+        // flight before this instance is destroyed.
         DeInitialiseHAL();
+        {
+            std::lock_guard<std::mutex> lock(g_VideoDeviceCallbackMutex);
+            g_VideoDeviceZoomSettingsChangedCallback = nullptr;
+            g_VideoDeviceDisplayFrameratePreChangeCallback = nullptr;
+            g_VideoDeviceDisplayFrameratePostChangeCallback = nullptr;
+        }
     }
 
     // Singleton getInstance method - following HdmiIn pattern
@@ -178,8 +191,15 @@ public:
                     device::HostPersistence::getInstance().persistHostProperty("VideoDevice.DFC", "None");
                     
                     // Trigger zoom settings changed callback
-                    if (g_VideoDeviceZoomSettingsChangedCallback) {
-                        g_VideoDeviceZoomSettingsChangedCallback(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_NONE);
+                    {
+                        decltype(g_VideoDeviceZoomSettingsChangedCallback) callback;
+                        {
+                            std::lock_guard<std::mutex> lock(g_VideoDeviceCallbackMutex);
+                            callback = g_VideoDeviceZoomSettingsChangedCallback;
+                        }
+                        if (callback) {
+                            callback(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_NONE);
+                        }
                     }
                     
                     DSLOG_INFO(" SUCCESS (NONE)");
@@ -195,8 +215,15 @@ public:
                     device::HostPersistence::getInstance().persistHostProperty("VideoDevice.DFC", "Full");
                     
                     // Trigger zoom settings changed callback
-                    if (g_VideoDeviceZoomSettingsChangedCallback) {
-                        g_VideoDeviceZoomSettingsChangedCallback(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_FULL);
+                    {
+                        decltype(g_VideoDeviceZoomSettingsChangedCallback) callback;
+                        {
+                            std::lock_guard<std::mutex> lock(g_VideoDeviceCallbackMutex);
+                            callback = g_VideoDeviceZoomSettingsChangedCallback;
+                        }
+                        if (callback) {
+                            callback(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_FULL);
+                        }
                     }
                     
                     DSLOG_INFO(" SUCCESS (FULL)");
@@ -212,8 +239,15 @@ public:
                     device::HostPersistence::getInstance().persistHostProperty("VideoDevice.DFC", "Full");
                     
                     // Trigger zoom settings changed callback
-                    if (g_VideoDeviceZoomSettingsChangedCallback) {
-                        g_VideoDeviceZoomSettingsChangedCallback(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_16_9_ZOOM);
+                    {
+                        decltype(g_VideoDeviceZoomSettingsChangedCallback) callback;
+                        {
+                            std::lock_guard<std::mutex> lock(g_VideoDeviceCallbackMutex);
+                            callback = g_VideoDeviceZoomSettingsChangedCallback;
+                        }
+                        if (callback) {
+                            callback(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_16_9_ZOOM);
+                        }
                     }
                     
                     DSLOG_INFO(" SUCCESS (16_9_ZOOM)");
@@ -508,8 +542,15 @@ public:
         }
         
         // Send pre-change callback
-        if (g_VideoDeviceDisplayFrameratePreChangeCallback) {
-            g_VideoDeviceDisplayFrameratePreChangeCallback(framerate);
+        {
+            decltype(g_VideoDeviceDisplayFrameratePreChangeCallback) callback;
+            {
+                std::lock_guard<std::mutex> lock(g_VideoDeviceCallbackMutex);
+                callback = g_VideoDeviceDisplayFrameratePreChangeCallback;
+            }
+            if (callback) {
+                callback(framerate);
+            }
         }
         
         if (0 != func) {
@@ -527,8 +568,15 @@ public:
         }
         
         // Send post-change callback (skip on invalid param, matching dsVideoDevice.c broadcast guard)
-        if (result != dsERR_INVALID_PARAM && g_VideoDeviceDisplayFrameratePostChangeCallback) {
-            g_VideoDeviceDisplayFrameratePostChangeCallback(std::move(framerate));
+        if (result != dsERR_INVALID_PARAM) {
+            decltype(g_VideoDeviceDisplayFrameratePostChangeCallback) callback;
+            {
+                std::lock_guard<std::mutex> lock(g_VideoDeviceCallbackMutex);
+                callback = g_VideoDeviceDisplayFrameratePostChangeCallback;
+            }
+            if (callback) {
+                callback(std::move(framerate));
+            }
         }
         
         return retCode;
@@ -550,6 +598,7 @@ public:
             // Register Zoom Settings Changed Callback
             if (bundle.OnZoomSettingsChanged) {
                 DSLOG_INFO("VideoDevice Zoom Settings Changed Event Callback Registered");
+                std::lock_guard<std::mutex> lock(g_VideoDeviceCallbackMutex);
                 g_VideoDeviceZoomSettingsChangedCallback = bundle.OnZoomSettingsChanged;
                 // Zoom callbacks are triggered manually during DFC setting
             }
@@ -557,7 +606,10 @@ public:
             // Register Display Framerate Pre-Change Callback - following dsVideoDevice.c pattern
             if (bundle.OnDisplayFrameratePreChange) {
                 DSLOG_INFO("VideoDevice Display Framerate Pre-Change Event Callback Registered");
-                g_VideoDeviceDisplayFrameratePreChangeCallback = bundle.OnDisplayFrameratePreChange;
+                {
+                    std::lock_guard<std::mutex> lock(g_VideoDeviceCallbackMutex);
+                    g_VideoDeviceDisplayFrameratePreChangeCallback = bundle.OnDisplayFrameratePreChange;
+                }
                 
                 // Register framerate pre-change callback with DS HAL - exact pattern from dsVideoDevice.c
                 dsError_t eRet = VideoDeviceRegisterFrameratePreChangeCB(VideoDeviceFramerateStatusPreChangeCB);
@@ -571,7 +623,10 @@ public:
             // Register Display Framerate Post-Change Callback - following dsVideoDevice.c pattern
             if (bundle.OnDisplayFrameratePostChange) {
                 DSLOG_INFO("VideoDevice Display Framerate Post-Change Event Callback Registered");
-                g_VideoDeviceDisplayFrameratePostChangeCallback = bundle.OnDisplayFrameratePostChange;
+                {
+                    std::lock_guard<std::mutex> lock(g_VideoDeviceCallbackMutex);
+                    g_VideoDeviceDisplayFrameratePostChangeCallback = bundle.OnDisplayFrameratePostChange;
+                }
                 
                 // Register framerate post-change callback with DS HAL - exact pattern from dsVideoDevice.c
                 dsError_t eRet = VideoDeviceRegisterFrameratePostChangeCB(VideoDeviceFramerateStatusPostChangeCB);
@@ -642,9 +697,14 @@ public:
         DSLOG_INFO(" inputStatus=%u", inputStatus);
         
         // Call the stored global callback if available
-        if (g_VideoDeviceDisplayFrameratePreChangeCallback) {
+        decltype(g_VideoDeviceDisplayFrameratePreChangeCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_VideoDeviceCallbackMutex);
+            callback = g_VideoDeviceDisplayFrameratePreChangeCallback;
+        }
+        if (callback) {
             std::string framerate = std::to_string(inputStatus);
-            g_VideoDeviceDisplayFrameratePreChangeCallback(std::move(framerate));
+            callback(std::move(framerate));
         }
     }
 
@@ -653,9 +713,14 @@ public:
         DSLOG_INFO(" inputStatus=%u", inputStatus);
         
         // Call the stored global callback if available
-        if (g_VideoDeviceDisplayFrameratePostChangeCallback) {
+        decltype(g_VideoDeviceDisplayFrameratePostChangeCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_VideoDeviceCallbackMutex);
+            callback = g_VideoDeviceDisplayFrameratePostChangeCallback;
+        }
+        if (callback) {
             std::string framerate = std::to_string(inputStatus);
-            g_VideoDeviceDisplayFrameratePostChangeCallback(std::move(framerate));
+            callback(std::move(framerate));
         }
     }
 

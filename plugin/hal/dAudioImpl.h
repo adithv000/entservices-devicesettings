@@ -54,6 +54,10 @@ static std::function<void(const std::string&)> g_AudioSecondaryLanguageChangedCa
 static std::function<void(const AudioPortState)> g_AudioPortStateChangedCallback;
 static std::function<void(const float)> g_AudioLevelChangedCallback;
 static std::function<void(const AudioPortType, const AudioStereoMode)> g_AudioModeChangedCallback;
+// Guards all g_Audio*Callback globals above: shared between the HAL dispatch
+// callbacks (readers/invokers) and setAllCallbacks()/constructor/destructor (writers)
+// so teardown cannot race with or interrupt an in-flight callback invocation.
+static std::mutex g_AudioCallbackMutex;
 
 #ifdef IGNORE_EDID_LOGIC
 static bool g_AudioHdmiAuto = false;
@@ -463,16 +467,19 @@ public:
             _audioPortEnabled[i] = false;
         }
         // Precheck: drop any callback left over from a prior (already destroyed) instance.
-        g_AudioOutHotPlugCallback = nullptr;
-        g_AudioFormatUpdateCallback = nullptr;
-        g_DolbyAtmosCapabilitiesChangedCallback = nullptr;
-        g_AssociatedAudioMixingChangedCallback = nullptr;
-        g_AudioFaderControlChangedCallback = nullptr;
-        g_AudioPrimaryLanguageChangedCallback = nullptr;
-        g_AudioSecondaryLanguageChangedCallback = nullptr;
-        g_AudioPortStateChangedCallback = nullptr;
-        g_AudioLevelChangedCallback = nullptr;
-        g_AudioModeChangedCallback = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+            g_AudioOutHotPlugCallback = nullptr;
+            g_AudioFormatUpdateCallback = nullptr;
+            g_DolbyAtmosCapabilitiesChangedCallback = nullptr;
+            g_AssociatedAudioMixingChangedCallback = nullptr;
+            g_AudioFaderControlChangedCallback = nullptr;
+            g_AudioPrimaryLanguageChangedCallback = nullptr;
+            g_AudioSecondaryLanguageChangedCallback = nullptr;
+            g_AudioPortStateChangedCallback = nullptr;
+            g_AudioLevelChangedCallback = nullptr;
+            g_AudioModeChangedCallback = nullptr;
+        }
         InitialiseHAL();
     }
 
@@ -514,24 +521,14 @@ public:
     {
         ENTRY_LOG;
 
-        // Clear stale global callbacks first: otherwise the next dAudioImpl instance's
-        // constructor fires notifyAudioPortStateChanged() (via InitialiseHAL()) before it
-        // re-registers its own callbacks, dispatching into this (about to be destroyed) instance.
-        g_AudioOutHotPlugCallback = nullptr;
-        g_AudioFormatUpdateCallback = nullptr;
-        g_DolbyAtmosCapabilitiesChangedCallback = nullptr;
-        g_AssociatedAudioMixingChangedCallback = nullptr;
-        g_AudioFaderControlChangedCallback = nullptr;
-        g_AudioPrimaryLanguageChangedCallback = nullptr;
-        g_AudioSecondaryLanguageChangedCallback = nullptr;
-        g_AudioPortStateChangedCallback = nullptr;
-        g_AudioLevelChangedCallback = nullptr;
-        g_AudioModeChangedCallback = nullptr;
-
 #ifdef DS_AUDIO_SETTINGS_PERSISTENCE
         stopAudioLevelPersistThread();
 #endif
 
+        // Terminate the HAL first so no further asynchronous callbacks can be
+        // dispatched, then clear the global handlers below under the same lock
+        // the dispatch/notify functions use, which drains any invocation already
+        // in flight before this instance is destroyed.
         if (_isInitialized) {
             try {
                 dsError_t ret = dsAudioPortTerm();
@@ -542,6 +539,20 @@ public:
                 DSLOG_ERR("Exception during Audio platform termination");
             }
             _isInitialized = false;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+            g_AudioOutHotPlugCallback = nullptr;
+            g_AudioFormatUpdateCallback = nullptr;
+            g_DolbyAtmosCapabilitiesChangedCallback = nullptr;
+            g_AssociatedAudioMixingChangedCallback = nullptr;
+            g_AudioFaderControlChangedCallback = nullptr;
+            g_AudioPrimaryLanguageChangedCallback = nullptr;
+            g_AudioSecondaryLanguageChangedCallback = nullptr;
+            g_AudioPortStateChangedCallback = nullptr;
+            g_AudioLevelChangedCallback = nullptr;
+            g_AudioModeChangedCallback = nullptr;
         }
         EXIT_LOG;
     }
@@ -1413,8 +1424,15 @@ public:
                     DSLOG_INFO("applied successfully: handle=%d, volume=%d", handle, volume);
                     
                     // Send audio level change event through callback if available
-                    if (g_AudioLevelChangedCallback) {
-                        g_AudioLevelChangedCallback(static_cast<float>(volume));
+                    {
+                        decltype(g_AudioLevelChangedCallback) callback;
+                        {
+                            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+                            callback = g_AudioLevelChangedCallback;
+                        }
+                        if (callback) {
+                            callback(static_cast<float>(volume));
+                        }
                     }
                 } else {
                     DSLOG_ERR("dsSetAudioLevel failed with error: %d", ret);
@@ -5718,8 +5736,13 @@ private:
         }
         
         // Call Audio event handler through global callback if available
-        if (g_AudioOutHotPlugCallback) {
-            g_AudioOutHotPlugCallback(wpePortType, static_cast<uint32_t>(uiPortNo), isPortConnected);
+        decltype(g_AudioOutHotPlugCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+            callback = g_AudioOutHotPlugCallback;
+        }
+        if (callback) {
+            callback(wpePortType, static_cast<uint32_t>(uiPortNo), isPortConnected);
         }
     }
     
@@ -5732,8 +5755,13 @@ private:
         AudioFormat wpeFormat = static_cast<AudioFormat>(audioFormat);
         
         // Call Audio event handler through global callback if available
-        if (g_AudioFormatUpdateCallback) {
-            g_AudioFormatUpdateCallback(wpeFormat);
+        decltype(g_AudioFormatUpdateCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+            callback = g_AudioFormatUpdateCallback;
+        }
+        if (callback) {
+            callback(wpeFormat);
         }
     }
     
@@ -5746,8 +5774,13 @@ private:
         DolbyAtmosCapability wpeAtmosCaps = static_cast<DolbyAtmosCapability>(atmosCaps);
         
         // Call Audio event handler through global callback if available
-        if (g_DolbyAtmosCapabilitiesChangedCallback) {
-            g_DolbyAtmosCapabilitiesChangedCallback(wpeAtmosCaps, status);
+        decltype(g_DolbyAtmosCapabilitiesChangedCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+            callback = g_DolbyAtmosCapabilitiesChangedCallback;
+        }
+        if (callback) {
+            callback(wpeAtmosCaps, status);
         }
     }
     
@@ -5757,8 +5790,13 @@ private:
     {
         DSLOG_INFO("Associated audio mixing changed: %s", mixing ? "enabled" : "disabled");
         // Call Audio event handler using global callback if available
-        if (g_AssociatedAudioMixingChangedCallback) {
-            g_AssociatedAudioMixingChangedCallback(mixing);
+        decltype(g_AssociatedAudioMixingChangedCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+            callback = g_AssociatedAudioMixingChangedCallback;
+        }
+        if (callback) {
+            callback(mixing);
         }
     }
     
@@ -5767,8 +5805,13 @@ private:
     {
         DSLOG_INFO("Audio fader control changed: mixerBalance=%d", mixerBalance);
         // Call Audio event handler using global callback if available
-        if (g_AudioFaderControlChangedCallback) {
-            g_AudioFaderControlChangedCallback(mixerBalance);
+        decltype(g_AudioFaderControlChangedCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+            callback = g_AudioFaderControlChangedCallback;
+        }
+        if (callback) {
+            callback(mixerBalance);
         }
     }
     
@@ -5777,8 +5820,13 @@ private:
     {
         DSLOG_INFO("Audio primary language changed: %s", primaryLanguage.c_str());
         // Call Audio event handler using global callback if available
-        if (g_AudioPrimaryLanguageChangedCallback) {
-            g_AudioPrimaryLanguageChangedCallback(primaryLanguage);
+        decltype(g_AudioPrimaryLanguageChangedCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+            callback = g_AudioPrimaryLanguageChangedCallback;
+        }
+        if (callback) {
+            callback(primaryLanguage);
         }
     }
     
@@ -5787,8 +5835,13 @@ private:
     {
         DSLOG_INFO("Audio secondary language changed: %s", secondaryLanguage.c_str());
         // Call Audio event handler using global callback if available
-        if (g_AudioSecondaryLanguageChangedCallback) {
-            g_AudioSecondaryLanguageChangedCallback(secondaryLanguage);
+        decltype(g_AudioSecondaryLanguageChangedCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+            callback = g_AudioSecondaryLanguageChangedCallback;
+        }
+        if (callback) {
+            callback(secondaryLanguage);
         }
     }
     
@@ -5797,8 +5850,13 @@ private:
     {
         DSLOG_INFO("Audio port state changed: state=%d", static_cast<int>(audioPortState));
         // Call Audio event handler using global callback if available
-        if (g_AudioPortStateChangedCallback) {
-            g_AudioPortStateChangedCallback(audioPortState);
+        decltype(g_AudioPortStateChangedCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+            callback = g_AudioPortStateChangedCallback;
+        }
+        if (callback) {
+            callback(audioPortState);
         }
     }
     
@@ -5807,8 +5865,13 @@ private:
     {
         DSLOG_INFO("Audio level changed: audioLevel=%d", audioLevel);
         // Call Audio event handler using global callback if available
-        if (g_AudioLevelChangedCallback) {
-            g_AudioLevelChangedCallback(static_cast<float>(audioLevel));
+        decltype(g_AudioLevelChangedCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+            callback = g_AudioLevelChangedCallback;
+        }
+        if (callback) {
+            callback(static_cast<float>(audioLevel));
         }
     }
     
@@ -5817,8 +5880,13 @@ private:
     {
         DSLOG_INFO("Audio mode changed: portType=%d, mode=%d", static_cast<int>(portType), static_cast<int>(mode));
         // Call Audio event handler using global callback if available
-        if (g_AudioModeChangedCallback) {
-            g_AudioModeChangedCallback(portType, mode);
+        decltype(g_AudioModeChangedCallback) callback;
+        {
+            std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
+            callback = g_AudioModeChangedCallback;
+        }
+        if (callback) {
+            callback(portType, mode);
         }
     }
 
@@ -5826,6 +5894,7 @@ private:
     void setAllCallbacks(const CallbackBundle& bundle) override
     {
         ENTRY_LOG;
+        std::lock_guard<std::mutex> lock(g_AudioCallbackMutex);
         
         // Register audio callbacks following HdmiIn pattern
         if (bundle.OnAudioOutHotPlug) {
