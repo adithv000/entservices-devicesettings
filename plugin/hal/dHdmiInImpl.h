@@ -53,18 +53,16 @@ static bool m_hdmiPortVrrCaps[dsHDMI_IN_PORT_MAX];
 
 static tv_hdmi_edid_version_t m_edidversion[dsHDMI_IN_PORT_MAX];
 
-static std::function<void(DeviceSettingsHDMIIn::HDMIInPort, bool)> g_HdmiInHotPlugCallback;
-static std::function<void(DeviceSettingsHDMIIn::HDMIInPort, DeviceSettingsHDMIIn::HDMIInSignalStatus)> g_HdmiInSignalStatusCallback;
-static std::function<void(DeviceSettingsHDMIIn::HDMIInPort, DeviceSettingsHDMIIn::HDMIVideoPortResolution)> g_HdmiInVideoModeUpdateCallback;
-static std::function<void(DeviceSettingsHDMIIn::HDMIInPort, bool)> g_HdmiInAllmStatusCallback;
-static std::function<void(DeviceSettingsHDMIIn::HDMIInPort, DeviceSettingsHDMIIn::HDMIInAviContentType)> g_HdmiInAviContentTypeCallback;
-static std::function<void(int32_t, int32_t)> g_HdmiInAVLatencyCallback;
-static std::function<void(DeviceSettingsHDMIIn::HDMIInPort, DeviceSettingsHDMIIn::HDMIInVRRType)> g_HdmiInVRRStatusCallback;
-static std::function<void(DeviceSettingsHDMIIn::HDMIInPort, bool)> g_HdmiInStatusCallback;
-// Guards all g_HdmiIn*Callback globals above: shared between the HAL dispatch
-// callbacks (readers/invokers) and setAllCallbacks()/constructor/destructor (writers)
-// so teardown cannot race with or interrupt an in-flight callback invocation.
-static std::mutex g_HdmiInCallbackMutex;
+// Each callback owns its own mutex/condition-variable (GuardedCallback) so one
+// callback type's invocation never blocks registration/invocation of another.
+static GuardedCallback<void(DeviceSettingsHDMIIn::HDMIInPort, bool)> g_HdmiInHotPlugCallback;
+static GuardedCallback<void(DeviceSettingsHDMIIn::HDMIInPort, DeviceSettingsHDMIIn::HDMIInSignalStatus)> g_HdmiInSignalStatusCallback;
+static GuardedCallback<void(DeviceSettingsHDMIIn::HDMIInPort, DeviceSettingsHDMIIn::HDMIVideoPortResolution)> g_HdmiInVideoModeUpdateCallback;
+static GuardedCallback<void(DeviceSettingsHDMIIn::HDMIInPort, bool)> g_HdmiInAllmStatusCallback;
+static GuardedCallback<void(DeviceSettingsHDMIIn::HDMIInPort, DeviceSettingsHDMIIn::HDMIInAviContentType)> g_HdmiInAviContentTypeCallback;
+static GuardedCallback<void(int32_t, int32_t)> g_HdmiInAVLatencyCallback;
+static GuardedCallback<void(DeviceSettingsHDMIIn::HDMIInPort, DeviceSettingsHDMIIn::HDMIInVRRType)> g_HdmiInVRRStatusCallback;
+static GuardedCallback<void(DeviceSettingsHDMIIn::HDMIInPort, bool)> g_HdmiInStatusCallback;
 
 class dHdmiInImpl : public hal::dHdmiIn::IPlatform {
 
@@ -77,17 +75,15 @@ public:
     {
         DSLOG_INFO("Constructor");
         // Precheck: drop any callback left over from a prior (already destroyed) instance.
-        {
-            std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-            g_HdmiInHotPlugCallback = nullptr;
-            g_HdmiInSignalStatusCallback = nullptr;
-            g_HdmiInVideoModeUpdateCallback = nullptr;
-            g_HdmiInAllmStatusCallback = nullptr;
-            g_HdmiInAviContentTypeCallback = nullptr;
-            g_HdmiInAVLatencyCallback = nullptr;
-            g_HdmiInVRRStatusCallback = nullptr;
-            g_HdmiInStatusCallback = nullptr;
-        }
+        // Reset() blocks until any invocation still in flight from that prior instance completes.
+        g_HdmiInHotPlugCallback.Reset();
+        g_HdmiInSignalStatusCallback.Reset();
+        g_HdmiInVideoModeUpdateCallback.Reset();
+        g_HdmiInAllmStatusCallback.Reset();
+        g_HdmiInAviContentTypeCallback.Reset();
+        g_HdmiInAVLatencyCallback.Reset();
+        g_HdmiInVRRStatusCallback.Reset();
+        g_HdmiInStatusCallback.Reset();
         InitialiseHAL();
     }
 
@@ -95,21 +91,17 @@ public:
     {
         DSLOG_ERR("Destructor");
         // Terminate the HAL first so no further asynchronous callbacks can be
-        // dispatched, then clear the global handlers below under the same lock
-        // the dispatch callbacks use, which drains any invocation already in
-        // flight before this instance is destroyed.
+        // dispatched, then Reset() below blocks until any invocation already
+        // in flight completes before this instance is destroyed.
         DeInitialiseHAL();
-        {
-            std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-            g_HdmiInHotPlugCallback = nullptr;
-            g_HdmiInSignalStatusCallback = nullptr;
-            g_HdmiInVideoModeUpdateCallback = nullptr;
-            g_HdmiInAllmStatusCallback = nullptr;
-            g_HdmiInAviContentTypeCallback = nullptr;
-            g_HdmiInAVLatencyCallback = nullptr;
-            g_HdmiInVRRStatusCallback = nullptr;
-            g_HdmiInStatusCallback = nullptr;
-        }
+        g_HdmiInHotPlugCallback.Reset();
+        g_HdmiInSignalStatusCallback.Reset();
+        g_HdmiInVideoModeUpdateCallback.Reset();
+        g_HdmiInAllmStatusCallback.Reset();
+        g_HdmiInAviContentTypeCallback.Reset();
+        g_HdmiInAVLatencyCallback.Reset();
+        g_HdmiInVRRStatusCallback.Reset();
+        g_HdmiInStatusCallback.Reset();
     }
 
     void InitialiseHAL()
@@ -467,8 +459,7 @@ public:
                 DSLOG_INFO(" its TV Profile");
                 if (bundle.OnHDMIInHotPlugEvent) {
                     DSLOG_INFO("HDMI In Hot Plug Event Callback Registered");
-                    std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-                    g_HdmiInHotPlugCallback = bundle.OnHDMIInHotPlugEvent;
+                    g_HdmiInHotPlugCallback.Set(bundle.OnHDMIInHotPlugEvent);
                     dsHdmiInRegisterConnectCB(DS_OnHDMIInHotPlugEvent);
                 }
 
@@ -476,8 +467,7 @@ public:
                 static dsHdmiInRegisterSignalChangeCB_t signalChangeCBFunc = 0;
                 if (bundle.OnHDMIInSignalStatusEvent) {
                     DSLOG_INFO("HDMI In Signal Status Event Callback Registered");
-                    std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-                    g_HdmiInSignalStatusCallback = bundle.OnHDMIInSignalStatusEvent;
+                    g_HdmiInSignalStatusCallback.Set(bundle.OnHDMIInSignalStatusEvent);
                     if (!signalChangeCBFunc) {
                         signalChangeCBFunc = (dsHdmiInRegisterSignalChangeCB_t)resolve(RDK_DSHAL_NAME, "dsHdmiInRegisterSignalChangeCB");
                     }
@@ -492,8 +482,7 @@ public:
                 static dsHdmiInRegisterStatusChangeCB_t StatusCBFunc = 0;
                 if (bundle.OnHDMIInStatusEvent) {
                     DSLOG_INFO("HDMI In Status Event Callback Registered");
-                    std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-                    g_HdmiInStatusCallback = bundle.OnHDMIInStatusEvent;
+                    g_HdmiInStatusCallback.Set(bundle.OnHDMIInStatusEvent);
                     if (!StatusCBFunc) {
                         StatusCBFunc = (dsHdmiInRegisterStatusChangeCB_t)resolve(RDK_DSHAL_NAME, "dsHdmiInRegisterStatusChangeCB");
                     }
@@ -508,8 +497,7 @@ public:
                 static dsHdmiInRegisterVideoModeUpdateCB_t videoModeUpdateCBFunc = 0;
                 if (bundle.OnHDMIInVideoModeUpdateEvent) {
                     DSLOG_INFO("HDMI In Video Mode Update Event Callback Registered");
-                    std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-                    g_HdmiInVideoModeUpdateCallback = bundle.OnHDMIInVideoModeUpdateEvent;
+                    g_HdmiInVideoModeUpdateCallback.Set(bundle.OnHDMIInVideoModeUpdateEvent);
                     if (!videoModeUpdateCBFunc) {
                         videoModeUpdateCBFunc = (dsHdmiInRegisterVideoModeUpdateCB_t)resolve(RDK_DSHAL_NAME, "dsHdmiInRegisterVideoModeUpdateCB");
                     }
@@ -524,8 +512,7 @@ public:
                 static dsHdmiInRegisterAllmChangeCB_t allmChangeCBFunc = 0;
                 if (bundle.OnHDMIInAllmStatusEvent) {
                     DSLOG_INFO("HDMI In ALLM Status Event Callback Registered");
-                    std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-                    g_HdmiInAllmStatusCallback = bundle.OnHDMIInAllmStatusEvent;
+                    g_HdmiInAllmStatusCallback.Set(bundle.OnHDMIInAllmStatusEvent);
                     if (!allmChangeCBFunc) {
                         allmChangeCBFunc = (dsHdmiInRegisterAllmChangeCB_t)resolve(RDK_DSHAL_NAME, "dsHdmiInRegisterAllmChangeCB");
                     }
@@ -540,8 +527,7 @@ public:
                 static dsHdmiInRegisterVRRChangeCB_t vrrChangeCBFunc = 0;
                 if (bundle.OnHDMIInVRRStatusEvent) {
                     DSLOG_INFO("HDMI In VRR Status Event Callback Registered");
-                    std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-                    g_HdmiInVRRStatusCallback = bundle.OnHDMIInVRRStatusEvent;
+                    g_HdmiInVRRStatusCallback.Set(bundle.OnHDMIInVRRStatusEvent);
                     if (!vrrChangeCBFunc) {
                         vrrChangeCBFunc = (dsHdmiInRegisterVRRChangeCB_t)resolve(RDK_DSHAL_NAME, "dsHdmiInRegisterVRRChangeCB");
                     }
@@ -556,8 +542,7 @@ public:
                 static dsHdmiInRegisterAviContentTypeChangeCB_t AviContentTypeChangeCBFunc = 0;
                 if (bundle.OnHDMIInAVIContentTypeEvent) {
                     DSLOG_INFO("HDMI In AVI Content Type Event Callback Registered");
-                    std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-                    g_HdmiInAviContentTypeCallback = bundle.OnHDMIInAVIContentTypeEvent;
+                    g_HdmiInAviContentTypeCallback.Set(bundle.OnHDMIInAVIContentTypeEvent);
                     if (!AviContentTypeChangeCBFunc) {
                         AviContentTypeChangeCBFunc = (dsHdmiInRegisterAviContentTypeChangeCB_t)resolve(RDK_DSHAL_NAME, "dsHdmiInRegisterAviContentTypeChangeCB");
                     }
@@ -572,8 +557,7 @@ public:
                 static dsHdmiInRegisterAVLatencyChangeCB_t AVLatencyChangeCBFunc = 0;
                 if (bundle.OnHDMIInAVLatencyEvent) {
                     DSLOG_INFO("HDMI In AV Latency Event Callback Registered");
-                    std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-                    g_HdmiInAVLatencyCallback = bundle.OnHDMIInAVLatencyEvent;
+                    g_HdmiInAVLatencyCallback.Set(bundle.OnHDMIInAVLatencyEvent);
                     if (!AVLatencyChangeCBFunc) {
                         AVLatencyChangeCBFunc = (dsHdmiInRegisterAVLatencyChangeCB_t)resolve(RDK_DSHAL_NAME, "dsHdmiInRegisterAVLatencyChangeCB");
                     }
@@ -763,41 +747,20 @@ public:
     static void DS_OnHDMIInHotPlugEvent(const dsHdmiInPort_t port, const bool isConnected)
     {
         DSLOG_INFO("DS_OnHDMIInHotPlugEvent event Received: port=%d, isConnected=%s", port, isConnected ? "true" : "false");
-        decltype(g_HdmiInHotPlugCallback) callback;
-        {
-            std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-            callback = g_HdmiInHotPlugCallback;
-        }
-        if (callback) {
-            callback(static_cast<DeviceSettingsHDMIIn::HDMIInPort>(port), isConnected);
-        }
+        g_HdmiInHotPlugCallback.Invoke(static_cast<DeviceSettingsHDMIIn::HDMIInPort>(port), isConnected);
     }
 
     static void DS_OnHDMIInSignalStatusEvent(const dsHdmiInPort_t port, const dsHdmiInSignalStatus_t signalStatus)
     {
         DSLOG_INFO("DS_OnHDMIInSignalStatusEvent event Received: port=%d, signalStatus=%d", port, signalStatus);
-        decltype(g_HdmiInSignalStatusCallback) callback;
-        {
-            std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-            callback = g_HdmiInSignalStatusCallback;
-        }
-        if (callback) {
-            callback(static_cast<HDMIInPort>(port), static_cast<HDMIInSignalStatus>(signalStatus));
-        }
+        g_HdmiInSignalStatusCallback.Invoke(static_cast<HDMIInPort>(port), static_cast<HDMIInSignalStatus>(signalStatus));
     }
 
     static void DS_OnHDMIInStatusEvent(const dsHdmiInStatus_t status)
     {
         DSLOG_INFO("DS_OnHDMIInStatusEvent event Received: Port=%d, isPresented=%s", status.activePort, status.isPresented ? "true" : "false");
         
-        decltype(g_HdmiInStatusCallback) callback;
-        {
-            std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-            callback = g_HdmiInStatusCallback;
-        }
-        if (callback) {
-            callback(static_cast<HDMIInPort>(status.activePort), status.isPresented);
-        }
+        g_HdmiInStatusCallback.Invoke(static_cast<HDMIInPort>(status.activePort), status.isPresented);
     }
 
     static void DS_OnHDMIInVideoModeUpdateEvent(const dsHdmiInPort_t port, const dsVideoPortResolution_t videoPortResolution)
@@ -805,73 +768,38 @@ public:
         DSLOG_INFO("DS_OnHDMIInVideoModeUpdateEvent event Received: port=%d", port); // adjust as needed
         DSLOG_INFO("Video Mode: %s pixelResolution %d aspectRatio %d stereoScopicMode %d frameRate %d", videoPortResolution.name, videoPortResolution.pixelResolution, videoPortResolution.aspectRatio, videoPortResolution.stereoScopicMode, videoPortResolution.frameRate);
 
-        decltype(g_HdmiInVideoModeUpdateCallback) callback;
-        {
-            std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-            callback = g_HdmiInVideoModeUpdateCallback;
-        }
-        if (callback) {
-            HDMIVideoPortResolution res;
-            res.name              = std::string(videoPortResolution.name);
-            res.pixelResolution   = static_cast<HDMIInVideoResolution>(videoPortResolution.pixelResolution);
-            res.aspectRatio       = static_cast<HDMIVideoAspectRatio>(videoPortResolution.aspectRatio);
-            res.stereoScopicMode  = static_cast<HDMIInVideoStereoScopicMode>(videoPortResolution.stereoScopicMode);
-            res.frameRate         = static_cast<HDMIInVideoFrameRate>(videoPortResolution.frameRate);
-            res.interlaced        = videoPortResolution.interlaced;
-            callback(static_cast<HDMIInPort>(port), std::move(res));
-        }
+        HDMIVideoPortResolution res;
+        res.name              = std::string(videoPortResolution.name);
+        res.pixelResolution   = static_cast<HDMIInVideoResolution>(videoPortResolution.pixelResolution);
+        res.aspectRatio       = static_cast<HDMIVideoAspectRatio>(videoPortResolution.aspectRatio);
+        res.stereoScopicMode  = static_cast<HDMIInVideoStereoScopicMode>(videoPortResolution.stereoScopicMode);
+        res.frameRate         = static_cast<HDMIInVideoFrameRate>(videoPortResolution.frameRate);
+        res.interlaced        = videoPortResolution.interlaced;
+        g_HdmiInVideoModeUpdateCallback.Invoke(static_cast<HDMIInPort>(port), std::move(res));
     }
 
     static void DS_OnHDMIInAllmStatusEvent(const dsHdmiInPort_t port, const bool allmStatus)
     {
         DSLOG_INFO("DS_OnHDMIInAllmStatusEvent event Received: port=%d, allmStatus=%s", port, allmStatus ? "true" : "false");
-        decltype(g_HdmiInAllmStatusCallback) callback;
-        {
-            std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-            callback = g_HdmiInAllmStatusCallback;
-        }
-        if (callback) {
-            callback(static_cast<HDMIInPort>(port), allmStatus);
-        }
+        g_HdmiInAllmStatusCallback.Invoke(static_cast<HDMIInPort>(port), allmStatus);
     }
 
     static void DS_OnHDMIInAVIContentTypeEvent(const dsHdmiInPort_t port, const dsAviContentType_t aviContentType)
     {
         DSLOG_INFO("DS_OnHDMIInAVIContentTypeEvent event Received: port=%d, aviContentType=%d", port, aviContentType);
-        decltype(g_HdmiInAviContentTypeCallback) callback;
-        {
-            std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-            callback = g_HdmiInAviContentTypeCallback;
-        }
-        if (callback) {
-            callback(static_cast<HDMIInPort>(port), static_cast<HDMIInAviContentType>(aviContentType));
-        }
+        g_HdmiInAviContentTypeCallback.Invoke(static_cast<HDMIInPort>(port), static_cast<HDMIInAviContentType>(aviContentType));
     }
 
     static void DS_OnHDMIInAVLatencyEvent(const int32_t audioDelay, const int32_t videoDelay)
     {
         DSLOG_INFO("DS_OnHDMIInAVLatencyEvent event Received: audioDelay=%d, videoDelay=%d", audioDelay, videoDelay);
-        decltype(g_HdmiInAVLatencyCallback) callback;
-        {
-            std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-            callback = g_HdmiInAVLatencyCallback;
-        }
-        if (callback) {
-            callback(audioDelay, videoDelay);
-        }
+        g_HdmiInAVLatencyCallback.Invoke(audioDelay, videoDelay);
     }
 
     static void DS_OnHDMIInVRRStatusEvent(const dsHdmiInPort_t port, const dsVRRType_t vrrType)
     {
         DSLOG_INFO("DS_OnHDMIInVRRStatusEvent event Received: port=%d, vrrType=%d", port, vrrType);
-        decltype(g_HdmiInVRRStatusCallback) callback;
-        {
-            std::lock_guard<std::mutex> lock(g_HdmiInCallbackMutex);
-            callback = g_HdmiInVRRStatusCallback;
-        }
-        if (callback) {
-            callback(static_cast<HDMIInPort>(port), static_cast<HDMIInVRRType>(vrrType));
-        }
+        g_HdmiInVRRStatusCallback.Invoke(static_cast<HDMIInPort>(port), static_cast<HDMIInVRRType>(vrrType));
     }
 
     virtual uint32_t GetHDMIInNumberOfInputs(int32_t &count) override

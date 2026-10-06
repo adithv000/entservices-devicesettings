@@ -60,14 +60,12 @@ static const dsDisplayColorDepth_t DEFAULT_COLOR_DEPTH = dsDISPLAY_COLORDEPTH_AU
 // static dsDisplayColorDepth_t hdmiColorDepth = DEFAULT_COLOR_DEPTH; // Unused variable - commented out
 
 // Static global callback functions for VideoPort events - following HdmiIn pattern
-static std::function<void(const ResolutionChange)> g_VideoPortResolutionPreChangeCallback;
-static std::function<void(const ResolutionChange)> g_VideoPortResolutionPostChangeCallback;
-static std::function<void(const VideoPortHdcpStatus)> g_VideoPortHDCPStatusChangeCallback;
-static std::function<void(const HDRStandard)> g_VideoPortVideoFormatUpdateCallback;
-// Guards all g_VideoPort*Callback globals above: shared between the HAL dispatch
-// callbacks (readers/invokers) and setAllCallbacks()/constructor/destructor (writers)
-// so teardown cannot race with or interrupt an in-flight callback invocation.
-static std::mutex g_VideoPortCallbackMutex;
+// Each callback owns its own mutex/condition-variable (GuardedCallback) so one
+// callback type's invocation never blocks registration/invocation of another.
+static GuardedCallback<void(const ResolutionChange)> g_VideoPortResolutionPreChangeCallback;
+static GuardedCallback<void(const ResolutionChange)> g_VideoPortResolutionPostChangeCallback;
+static GuardedCallback<void(const VideoPortHdcpStatus)> g_VideoPortHDCPStatusChangeCallback;
+static GuardedCallback<void(const HDRStandard)> g_VideoPortVideoFormatUpdateCallback;
 
 class dVideoPortImpl : public hal::dVideoPort::IPlatform {
 
@@ -87,13 +85,11 @@ public:
         DSLOG_INFO("Constructor");
         getInstance() = this; // Set static instance for callback access
         // Precheck: drop any callback left over from a prior (already destroyed) instance.
-        {
-            std::lock_guard<std::mutex> lock(g_VideoPortCallbackMutex);
-            g_VideoPortResolutionPreChangeCallback = nullptr;
-            g_VideoPortResolutionPostChangeCallback = nullptr;
-            g_VideoPortHDCPStatusChangeCallback = nullptr;
-            g_VideoPortVideoFormatUpdateCallback = nullptr;
-        }
+        // Reset() blocks until any invocation still in flight from that prior instance completes.
+        g_VideoPortResolutionPreChangeCallback.Reset();
+        g_VideoPortResolutionPostChangeCallback.Reset();
+        g_VideoPortHDCPStatusChangeCallback.Reset();
+        g_VideoPortVideoFormatUpdateCallback.Reset();
         InitialiseHAL();
     }
 
@@ -101,17 +97,13 @@ public:
     {
         DSLOG_INFO("Destructor");
         // Terminate the HAL first so no further asynchronous callbacks can be
-        // dispatched, then clear the global handlers below under the same lock
-        // the dispatch callbacks use, which drains any invocation already in
-        // flight before this instance is destroyed.
+        // dispatched, then Reset() below blocks until any invocation already
+        // in flight completes before this instance is destroyed.
         DeInitialiseHAL();
-        {
-            std::lock_guard<std::mutex> lock(g_VideoPortCallbackMutex);
-            g_VideoPortResolutionPreChangeCallback = nullptr;
-            g_VideoPortResolutionPostChangeCallback = nullptr;
-            g_VideoPortHDCPStatusChangeCallback = nullptr;
-            g_VideoPortVideoFormatUpdateCallback = nullptr;
-        }
+        g_VideoPortResolutionPreChangeCallback.Reset();
+        g_VideoPortResolutionPostChangeCallback.Reset();
+        g_VideoPortHDCPStatusChangeCallback.Reset();
+        g_VideoPortVideoFormatUpdateCallback.Reset();
         getInstance() = nullptr; // Clear static instance
     }
 
@@ -1445,25 +1437,20 @@ public:
             // Register Resolution Pre/Post Change callbacks
             if (bundle.OnResolutionPreChange) {
                 DSLOG_INFO("VideoPort Resolution PreChange Event Callback Registered");
-                std::lock_guard<std::mutex> lock(g_VideoPortCallbackMutex);
-                g_VideoPortResolutionPreChangeCallback = bundle.OnResolutionPreChange;
+                g_VideoPortResolutionPreChangeCallback.Set(bundle.OnResolutionPreChange);
                 // Resolution callbacks are handled manually during resolution setting
             }
             
             if (bundle.OnResolutionPostChange) {
                 DSLOG_INFO("VideoPort Resolution PostChange Event Callback Registered");
-                std::lock_guard<std::mutex> lock(g_VideoPortCallbackMutex);
-                g_VideoPortResolutionPostChangeCallback = bundle.OnResolutionPostChange;
+                g_VideoPortResolutionPostChangeCallback.Set(bundle.OnResolutionPostChange);
                 // Resolution callbacks are handled manually during resolution setting
             }
             
             // Register HDCP Status Callback with DS HAL
             if (bundle.OnHDCPStatusChange) {
                 DSLOG_INFO("VideoPort HDCP Status Change Event Callback Registered");
-                {
-                    std::lock_guard<std::mutex> lock(g_VideoPortCallbackMutex);
-                    g_VideoPortHDCPStatusChangeCallback = bundle.OnHDCPStatusChange;
-                }
+                g_VideoPortHDCPStatusChangeCallback.Set(bundle.OnHDCPStatusChange);
                 
                 intptr_t handle = 0;
                 dsError_t eReturn = dsGetVideoPort(dsVIDEOPORT_TYPE_HDMI, 0, &handle);
@@ -1495,10 +1482,7 @@ public:
             // Register Video Format Update Callback with DS HAL
             if (bundle.OnVideoFormatUpdate) {
                 DSLOG_INFO("VideoPort Video Format Update Event Callback Registered");
-                {
-                    std::lock_guard<std::mutex> lock(g_VideoPortCallbackMutex);
-                    g_VideoPortVideoFormatUpdateCallback = bundle.OnVideoFormatUpdate;
-                }
+                g_VideoPortVideoFormatUpdateCallback.Set(bundle.OnVideoFormatUpdate);
                 
                 dsError_t eRet = VideoPortRegisterVideoFormatUpdateCB(VideoPortVideoFormatUpdateCallback);
                 if (dsERR_NONE != eRet) {
@@ -1645,14 +1629,7 @@ public:
         _dsSyncHdmiStatus(DS_HDMI_TAG_HDCPVERSION, protocolVersion);
         
         // Call the stored global callback if available
-        decltype(g_VideoPortHDCPStatusChangeCallback) callback;
-        {
-            std::lock_guard<std::mutex> lock(g_VideoPortCallbackMutex);
-            callback = g_VideoPortHDCPStatusChangeCallback;
-        }
-        if (callback) {
-            callback(hdcpStatus);
-        }
+        g_VideoPortHDCPStatusChangeCallback.Invoke(hdcpStatus);
     }
 
     static void VideoPortVideoFormatUpdateCallback(dsHDRStandard_t videoFormat)
@@ -1682,14 +1659,7 @@ public:
         }
         
         // Call the stored global callback if available
-        decltype(g_VideoPortVideoFormatUpdateCallback) callback;
-        {
-            std::lock_guard<std::mutex> lock(g_VideoPortCallbackMutex);
-            callback = g_VideoPortVideoFormatUpdateCallback;
-        }
-        if (callback) {
-            callback(hdrStandard);
-        }
+        g_VideoPortVideoFormatUpdateCallback.Invoke(hdrStandard);
     }
 
     // DS HAL Video Format Update Callback Registration
@@ -1779,14 +1749,7 @@ public:
         }
         
         // Call the stored global callback if available
-        decltype(g_VideoPortResolutionPreChangeCallback) callback;
-        {
-            std::lock_guard<std::mutex> lock(g_VideoPortCallbackMutex);
-            callback = g_VideoPortResolutionPreChangeCallback;
-        }
-        if (callback) {
-            callback(resolutionChange);
-        }
+        g_VideoPortResolutionPreChangeCallback.Invoke(resolutionChange);
     }
 
     static void VideoPortPostResolutionChange(dsVideoPortResolution_t* resolution)
@@ -1836,14 +1799,7 @@ public:
         }
 
         // Call the stored global callback if available
-        decltype(g_VideoPortResolutionPostChangeCallback) callback;
-        {
-            std::lock_guard<std::mutex> lock(g_VideoPortCallbackMutex);
-            callback = g_VideoPortResolutionPostChangeCallback;
-        }
-        if (callback) {
-            callback(resolutionChange);
-        }
+        g_VideoPortResolutionPostChangeCallback.Invoke(resolutionChange);
     }
 
     static void convertDSResolutionToResolutionChange(dsVideoPortResolution_t* dsResolution, ResolutionChange& resolutionChange)
