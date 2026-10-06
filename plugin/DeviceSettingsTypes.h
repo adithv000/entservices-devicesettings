@@ -89,12 +89,17 @@ public:
             local = _fn;
             ++_active;
         }
-        local(std::forward<Args>(args)...);
-        {
-            std::lock_guard<std::mutex> lock(_mutex);
-            if (--_active == 0) {
-                _drained.notify_all();
-            }
+        // Dispatchers are registered as raw C function pointers with the HAL; an exception
+        // unwinding back across that boundary is undefined behavior, so it must stop here.
+        // Caught (not just RAII-unwound), so the _active decrement below always runs.
+        try {
+            local(std::forward<Args>(args)...);
+        } catch (...) {
+            DSLOG_ERR("GuardedCallback::Invoke: callback threw, exception suppressed");
+        }
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (--_active == 0) {
+            _drained.notify_all();
         }
     }
 
