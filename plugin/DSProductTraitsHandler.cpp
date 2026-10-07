@@ -26,6 +26,7 @@
 #include <thread>
 #include <chrono>
 #include <fstream>
+#include <utility>
 #include <unistd.h>
 
 namespace WPEFramework {
@@ -35,7 +36,7 @@ namespace DSProductTraits {
 // LambdaJob helper for WPEFramework timer callbacks
 class LambdaJob : public Core::IDispatch {
 public:
-    LambdaJob(std::function<void()> job) : _job(job) {}
+    LambdaJob(std::function<void()> job) : _job(std::move(job)) {}
     void Dispatch() override { _job(); }
 private:
     std::function<void()> _job;

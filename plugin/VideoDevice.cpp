@@ -46,11 +46,11 @@ void VideoDevice::Platform_init()
     bundle.OnZoomSettingsChanged = [this](const VideoDeviceZoom zoomSetting) {
         this->OnZoomSettingsChanged(zoomSetting);
     };
-    bundle.OnDisplayFrameratePreChange = [this](const string frameRate) {
-        this->OnDisplayFrameratePreChange(frameRate);
+    bundle.OnDisplayFrameratePreChange = [this](string frameRate) {
+        this->OnDisplayFrameratePreChange(std::move(frameRate));
     };
-    bundle.OnDisplayFrameratePostChange = [this](const string frameRate) {
-        this->OnDisplayFrameratePostChange(frameRate);
+    bundle.OnDisplayFrameratePostChange = [this](string frameRate) {
+        this->OnDisplayFrameratePostChange(std::move(frameRate));
     };
     
     if (_platform) {
@@ -201,11 +201,11 @@ uint32_t VideoDevice::GetCurrentDisplayFrameRate(const int32_t handle, string &f
     return result;
 }
 
-uint32_t VideoDevice::SetDisplayFrameRate(const int32_t handle, const string framerate) {
+uint32_t VideoDevice::SetDisplayFrameRate(const int32_t handle, string framerate) {
     DSLOG_INFO("handle=%d, framerate=%s", handle, framerate.c_str());
     uint32_t result = WPEFramework::Core::ERROR_GENERAL;
     if (_platform) {
-        result = this->platform().SetDisplayFrameRate(handle, framerate);
+        result = this->platform().SetDisplayFrameRate(handle, std::move(framerate));
     }
     if (result == WPEFramework::Core::ERROR_NONE) {
         DSLOG_INFO("SUCCESS - platform call completed successfully");
@@ -221,12 +221,12 @@ void VideoDevice::OnZoomSettingsChanged(const VideoDeviceZoom zoomSetting) {
     _parent.OnZoomSettingsChanged(zoomSetting);
 }
 
-void VideoDevice::OnDisplayFrameratePreChange(const string frameRate) {
+void VideoDevice::OnDisplayFrameratePreChange(string frameRate) {
     DSLOG_INFO("DS HAL OnDisplayFrameratePreChange event: frameRate=%s", frameRate.c_str());
-    _parent.OnDisplayFrameratePreChange(frameRate);
+    _parent.OnDisplayFrameratePreChange(std::move(frameRate));
 }
 
-void VideoDevice::OnDisplayFrameratePostChange(const string frameRate) {
+void VideoDevice::OnDisplayFrameratePostChange(string frameRate) {
     DSLOG_INFO("DS HAL OnDisplayFrameratePostChange event: frameRate=%s", frameRate.c_str());
-    _parent.OnDisplayFrameratePostChange(frameRate);
+    _parent.OnDisplayFrameratePostChange(std::move(frameRate));
 }

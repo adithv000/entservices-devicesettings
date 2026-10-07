@@ -40,7 +40,7 @@ namespace dAudio {
         virtual ~IPlatform() = default;
 
         // Callback management
-        virtual void setAllCallbacks(const CallbackBundle bundle) = 0;
+        virtual void setAllCallbacks(const CallbackBundle& bundle) = 0;
         virtual void getPersistenceValue() = 0;
         
         // Static callback functions for HAL events
@@ -115,7 +115,7 @@ namespace dAudio {
 
         // Persistence
         virtual uint32_t GetAudioEnablePersist(const int32_t handle, bool &enabled, std::string &portName) = 0;
-        virtual uint32_t SetAudioEnablePersist(const int32_t handle, const bool enable, const std::string portName) = 0;
+        virtual uint32_t SetAudioEnablePersist(const int32_t handle, const bool enable, const std::string& portName) = 0;
 
         // MS decode status
         virtual uint32_t IsAudioMSDecoded(const int32_t handle, bool &hasms11Decode) = 0;
@@ -184,7 +184,7 @@ namespace dAudio {
         virtual uint32_t SetAudioMixerLevels(const int32_t handle, const WPEFramework::Exchange::IDeviceSettingsAudio::AudioInput audioInput, const int32_t volume) = 0;
 
         // MS12 settings override
-        virtual uint32_t SetAudioMS12SettingsOverride(const int32_t handle, const std::string profileName, const std::string profileSettingsName, const std::string profileSettingValue, const std::string profileState) = 0;
+        virtual uint32_t SetAudioMS12SettingsOverride(const int32_t handle, const std::string profileName, const std::string profileSettingsName, const std::string profileSettingValue, const std::string& profileState) = 0;
 
         // Reset methods
         virtual uint32_t ResetAudioDialogEnhancement(const int32_t handle) = 0;

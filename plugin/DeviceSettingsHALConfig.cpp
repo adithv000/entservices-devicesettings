@@ -42,6 +42,7 @@
 
 #include <dlfcn.h>
 #include <cstring>
+#include <utility>
 #include <unistd.h>
 #include <set>
 #include <sstream>
@@ -410,7 +411,7 @@ void PopulateFPDConfig(
             textDisplayCfg.maxVerticalIterations   = cfg.maxVerticalIterations;
             textDisplayCfg.levels                = cfg.levels;
             textDisplayCfg.colorMode             = cfg.colorMode;
-            textDisplays.push_back(textDisplayCfg);
+            textDisplays.push_back(std::move(textDisplayCfg));
 
             if (cfg.supportedColors != nullptr) {
                 for (int colorIndex = 0; colorIndex < colorCount; ++colorIndex) {
@@ -516,7 +517,7 @@ void PopulateAudioConfig(
         typeCfg.supportedStereoModeMask = (cfg.stereoModes != NULL)
             ? ToEnumMask(cfg.stereoModes, cfg.numSupportedStereoModes)
             : 0;
-        audioTypes.push_back(typeCfg);
+        audioTypes.push_back(std::move(typeCfg));
     }
 
     for (int i = 0; i < portCount; i++) {
@@ -620,7 +621,7 @@ void PopulateVideoPortConfig(
         } else {
             typeCfg.supportedResolutionNames.clear();
         }
-        videoPortTypes.push_back(typeCfg);
+        videoPortTypes.push_back(std::move(typeCfg));
     }
 
     for (int i = 0; i < portCount; i++) {
@@ -632,7 +633,7 @@ void PopulateVideoPortConfig(
         portCfg.connectedAudioPortType   = static_cast<int32_t>(cfg.connectedAOP.type);
         portCfg.connectedAudioPortIndex  = cfg.connectedAOP.index;
         portCfg.defaultResolution        = (cfg.defaultResolution ? cfg.defaultResolution : "");
-        videoPorts.push_back(portCfg);
+        videoPorts.push_back(std::move(portCfg));
     }
 
     DSLOG_INFO("Loaded config from HAL (videoPortTypes=%zu videoPorts=%zu)",
@@ -689,7 +690,8 @@ void PopulateVideoPortResolutionConfig(
 
     for (int i = 0; i < resolutionCount; ++i) {
         const dsVideoPortResolution_t& cfg = halConfig.pKResolutionsSettings[i];
-        if (cfg.name == NULL) {
+        // cfg.name is a fixed-size char array, never NULL; check for an empty string instead.
+        if (cfg.name[0] == '\0') {
             continue;
         }
 
@@ -704,7 +706,7 @@ void PopulateVideoPortResolutionConfig(
         resCfg.stereoScopicMode  = static_cast<VideoStereoScopicMode>(cfg.stereoScopicMode);
         resCfg.frameRate         = static_cast<VideoFrameRate>(cfg.frameRate);
         resCfg.interlaced        = cfg.interlaced;
-        resolutions.push_back(resCfg);
+        resolutions.push_back(std::move(resCfg));
     }
 
     DSLOG_INFO("Loaded resolution config from HAL (videoPortType=%d resolutions=%zu)",

@@ -129,17 +129,19 @@ private:
 
         DSLOG_INFO("Audio level persistence coalescing thread started");
         while (g_audioLevelPersistThreadAlive.load()) {
-            std::unique_lock<std::mutex> lk(g_audioLevelPersistMutex);
-            g_audioLevelPersistCv.wait(lk, [] {
-                return g_audioLevelPersistPending.load() || !g_audioLevelPersistThreadAlive.load();
-            });
+            {
+                // Scoped so the lock is released solely via unique_lock's destructor, not an explicit unlock().
+                std::unique_lock<std::mutex> lk(g_audioLevelPersistMutex);
+                g_audioLevelPersistCv.wait(lk, [] {
+                    return g_audioLevelPersistPending.load() || !g_audioLevelPersistThreadAlive.load();
+                });
 
-            if (!g_audioLevelPersistThreadAlive.load()) {
-                break;
+                if (!g_audioLevelPersistThreadAlive.load()) {
+                    break;
+                }
+
+                g_audioLevelPersistPending.store(false);
             }
-
-            g_audioLevelPersistPending.store(false);
-            lk.unlock();
 
             // Legacy delay before persisting latest coalesced values.
             std::this_thread::sleep_for(std::chrono::seconds(3));
@@ -2376,7 +2378,7 @@ public:
         return WPEFramework::Core::ERROR_NONE;
     }
 
-    uint32_t SetAudioEnablePersist(const int32_t handle, const bool enable, const string portName) override {
+    uint32_t SetAudioEnablePersist(const int32_t handle, const bool enable, const string& portName) override {
         ENTRY_LOG;
         if (!_isInitialized) {
             DSLOG_ERR("Audio platform not initialized");
@@ -3296,7 +3298,8 @@ public:
                 std::string _PropertyMode  = getCurrentProfileProperty("SurroundVirtualizer.mode");
                 std::string _PropertyBoost = getCurrentProfileProperty("SurroundVirtualizer.boost");
                 device::HostPersistence::getInstance().persistHostProperty(_PropertyMode, std::to_string(surroundVirtualizer.mode));
-                if ((surroundVirtualizer.mode >= 0) && (surroundVirtualizer.mode <= 2)) {
+                // mode is unsigned; only the upper bound is meaningful.
+                if (surroundVirtualizer.mode <= 2) {
                     device::HostPersistence::getInstance().persistHostProperty(_PropertyBoost, std::to_string(surroundVirtualizer.boost));
                 }
 #endif
@@ -3530,7 +3533,7 @@ public:
                 if (*token != '\0') {
                     WPEFramework::Exchange::IDeviceSettingsAudio::MS12AudioProfile profile;
                     profile.audioProfile = std::string(token);
-                    profileVec.push_back(profile);
+                    profileVec.push_back(std::move(profile));
                 }
                 token = strtok(nullptr, ",");
             }
@@ -3640,7 +3643,7 @@ public:
 
     uint32_t SetAudioMS12SettingsOverride(const int32_t handle, const string profileName, 
                                          const string profileSettingsName, const string profileSettingValue, 
-                                         const string profileState) override {
+                                         const string& profileState) override {
         ENTRY_LOG;
         if (!_isInitialized) {
             DSLOG_ERR("Audio platform not initialized");
@@ -5795,7 +5798,7 @@ private:
     }
 
     // Callback management implementation following HdmiIn pattern
-    void setAllCallbacks(const CallbackBundle bundle) override
+    void setAllCallbacks(const CallbackBundle& bundle) override
     {
         ENTRY_LOG;
         

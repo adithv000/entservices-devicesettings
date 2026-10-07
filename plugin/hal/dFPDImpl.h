@@ -379,6 +379,7 @@ public:
                 /* Persist Power.Color for POWER indicator
                  * Mirrors dsFPD.c _dsSetFPColor + enumToColor helper. */
                 if (static_cast<int>(indicator) == dsFPD_INDICATOR_POWER) {
+                    std::lock_guard<std::mutex> lock(fpd_initMutex);
                     _dsPowerLedColor = static_cast<dsFPDColor_t>(maskedColor);
                     try {
                         const char* colorStr = "BLUE";
