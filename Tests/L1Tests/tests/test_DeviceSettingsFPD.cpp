@@ -164,3 +164,96 @@ TEST_F(DeviceSettingsFPDTest, SetAndGetFPDColor)
     EXPECT_EQ(Core::ERROR_NONE, fpd->GetFPDColor(FPDIndicator::DS_FPD_INDICATOR_POWER, color));
     EXPECT_EQ(static_cast<uint32_t>(dsFPD_COLOR_RED), color);
 }
+
+TEST_F(DeviceSettingsFPDTest, SetFPDBlink)
+{
+    ASSERT_NE(nullptr, fpd);
+
+    EXPECT_CALL(*p_dsFPDHalMock, dsSetFPBlink(dsFPD_INDICATOR_POWER, 500u, 10u))
+        .Times(1)
+        .WillOnce(Return(dsERR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE, fpd->SetFPDBlink(FPDIndicator::DS_FPD_INDICATOR_POWER, 500, 10));
+}
+
+TEST_F(DeviceSettingsFPDTest, SetFPDScroll)
+{
+    ASSERT_NE(nullptr, fpd);
+
+    EXPECT_CALL(*p_dsFPDHalMock, dsSetFPScroll(::testing::_, ::testing::_, ::testing::_))
+        .Times(1)
+        .WillOnce(Return(dsERR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE, fpd->SetFPDScroll(1000, 2, 2));
+}
+
+TEST_F(DeviceSettingsFPDTest, SetFPDTime)
+{
+    ASSERT_NE(nullptr, fpd);
+
+    EXPECT_CALL(*p_dsFPDHalMock, dsSetFPTime(::testing::_, ::testing::_, ::testing::_))
+        .Times(1)
+        .WillOnce(Return(dsERR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE,
+        fpd->SetFPDTime(Exchange::IDeviceSettingsFPD::DS_FPD_TIMEFORMAT_12_HOUR, 10, 30));
+}
+
+TEST_F(DeviceSettingsFPDTest, SetAndGetFPDTimeFormat)
+{
+    ASSERT_NE(nullptr, fpd);
+
+    EXPECT_CALL(*p_dsFPDHalMock, dsSetFPTimeFormat(::testing::_))
+        .Times(1)
+        .WillOnce(Return(dsERR_NONE));
+    EXPECT_EQ(Core::ERROR_NONE,
+        fpd->SetFPDTimeFormat(Exchange::IDeviceSettingsFPD::DS_FPD_TIMEFORMAT_24_HOUR));
+
+    EXPECT_CALL(*p_dsFPDHalMock, dsGetFPTimeFormat(::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke([](dsFPDTimeFormat_t* fmt) {
+            *fmt = static_cast<dsFPDTimeFormat_t>(Exchange::IDeviceSettingsFPD::DS_FPD_TIMEFORMAT_24_HOUR);
+            return dsERR_NONE;
+        }));
+    Exchange::IDeviceSettingsFPD::FPDTimeFormat fpdFmt = Exchange::IDeviceSettingsFPD::DS_FPD_TIMEFORMAT_12_HOUR;
+    EXPECT_EQ(Core::ERROR_NONE, fpd->GetFPDTimeFormat(fpdFmt));
+    EXPECT_EQ(Exchange::IDeviceSettingsFPD::DS_FPD_TIMEFORMAT_24_HOUR, fpdFmt);
+}
+
+TEST_F(DeviceSettingsFPDTest, EnableFPDClockDisplay)
+{
+    ASSERT_NE(nullptr, fpd);
+
+    EXPECT_CALL(*p_dsFPDHalMock, dsFPEnableCLockDisplay(1))
+        .Times(1)
+        .WillOnce(Return(dsERR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE, fpd->EnableFPDClockDisplay(true));
+}
+
+TEST_F(DeviceSettingsFPDTest, SetFPDMode)
+{
+    ASSERT_NE(nullptr, fpd);
+
+    EXPECT_CALL(*p_dsFPDHalMock, dsSetFPDMode(::testing::_))
+        .Times(1)
+        .WillOnce(Return(dsERR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE, fpd->SetFPDMode(Exchange::IDeviceSettingsFPD::DS_FPD_MODE_CLOCK));
+}
+
+// SetFPDTextBrightness/GetFPDTextBrightness are documented as deprecated and
+// unimplemented in dFPDImpl.h - they always return ERROR_GENERAL, no HAL call made.
+TEST_F(DeviceSettingsFPDTest, FPDTextBrightnessIsUnimplemented)
+{
+    ASSERT_NE(nullptr, fpd);
+
+    EXPECT_CALL(*p_dsFPDHalMock, dsSetFPTextBrightness(::testing::_, ::testing::_)).Times(0);
+    EXPECT_EQ(Core::ERROR_GENERAL,
+        fpd->SetFPDTextBrightness(Exchange::IDeviceSettingsFPD::DS_FPD_TEXTDISPLAY_TEXT, 50));
+
+    uint32_t brightness = 0;
+    EXPECT_CALL(*p_dsFPDHalMock, dsGetFPTextBrightness(::testing::_, ::testing::_)).Times(0);
+    EXPECT_EQ(Core::ERROR_GENERAL,
+        fpd->GetFPDTextBrightness(Exchange::IDeviceSettingsFPD::DS_FPD_TEXTDISPLAY_TEXT, brightness));
+}

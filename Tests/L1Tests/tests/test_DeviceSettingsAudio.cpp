@@ -135,3 +135,24 @@ TEST_F(DeviceSettingsAudioTest, GetAudioLevelHalFailure)
     float level = 0.0f;
     EXPECT_EQ(Core::ERROR_GENERAL, audio->GetAudioLevel(handle, level));
 }
+
+TEST_F(DeviceSettingsAudioTest, SetAndGetAudioDelayOffset)
+{
+    ASSERT_NE(nullptr, audio);
+    int32_t handle = GetHandle();
+
+    EXPECT_CALL(*p_dsAudioHalMock, dsSetAudioDelayOffset(handle, 15u))
+        .Times(1)
+        .WillOnce(Return(dsERR_NONE));
+    EXPECT_EQ(Core::ERROR_NONE, audio->SetAudioDelayOffset(handle, 15));
+
+    EXPECT_CALL(*p_dsAudioHalMock, dsGetAudioDelayOffset(handle, ::testing::_))
+        .Times(1)
+        .WillOnce(Invoke([](intptr_t, uint32_t* offset) {
+            *offset = 15;
+            return dsERR_NONE;
+        }));
+    uint32_t delayOffset = 0;
+    EXPECT_EQ(Core::ERROR_NONE, audio->GetAudioDelayOffset(handle, delayOffset));
+    EXPECT_EQ(15u, delayOffset);
+}

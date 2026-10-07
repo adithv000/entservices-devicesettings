@@ -628,6 +628,72 @@ TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_AudioSetMute)
     audio->Release();
 }
 
+TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_AudioIsAudioMuted)
+{
+    EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_NE(nullptr, m_deviceSettingsPlugin);
+
+    Exchange::IDeviceSettingsAudio* audio = m_deviceSettingsPlugin->QueryInterface<Exchange::IDeviceSettingsAudio>();
+    ASSERT_NE(nullptr, audio);
+
+    EXPECT_CALL(*p_dsAudioHalMock, dsGetAudioPort(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Invoke([](dsAudioPortType_t, int, intptr_t* handle) {
+            *handle = 1;
+            return dsERR_NONE;
+        }));
+    int32_t handle = -1;
+    EXPECT_EQ(Core::ERROR_NONE,
+        audio->GetAudioPort(Exchange::IDeviceSettingsAudio::AUDIO_PORT_TYPE_SPEAKER, 0, handle));
+
+    EXPECT_CALL(*p_dsAudioHalMock, dsIsAudioMute(handle, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke([](intptr_t, bool* muted) {
+            *muted = true;
+            return dsERR_NONE;
+        }));
+
+    bool muted = false;
+    EXPECT_EQ(Core::ERROR_NONE, audio->IsAudioMuted(handle, muted));
+    EXPECT_TRUE(muted);
+
+    audio->Release();
+}
+
+TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_AudioDelayOffset)
+{
+    EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_NE(nullptr, m_deviceSettingsPlugin);
+
+    Exchange::IDeviceSettingsAudio* audio = m_deviceSettingsPlugin->QueryInterface<Exchange::IDeviceSettingsAudio>();
+    ASSERT_NE(nullptr, audio);
+
+    EXPECT_CALL(*p_dsAudioHalMock, dsGetAudioPort(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Invoke([](dsAudioPortType_t, int, intptr_t* handle) {
+            *handle = 1;
+            return dsERR_NONE;
+        }));
+    int32_t handle = -1;
+    EXPECT_EQ(Core::ERROR_NONE,
+        audio->GetAudioPort(Exchange::IDeviceSettingsAudio::AUDIO_PORT_TYPE_SPEAKER, 0, handle));
+
+    EXPECT_CALL(*p_dsAudioHalMock, dsSetAudioDelayOffset(handle, 15u))
+        .Times(1)
+        .WillOnce(::testing::Return(dsERR_NONE));
+    EXPECT_EQ(Core::ERROR_NONE, audio->SetAudioDelayOffset(handle, 15));
+
+    EXPECT_CALL(*p_dsAudioHalMock, dsGetAudioDelayOffset(handle, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke([](intptr_t, uint32_t* offset) {
+            *offset = 15;
+            return dsERR_NONE;
+        }));
+    uint32_t delayOffset = 0;
+    EXPECT_EQ(Core::ERROR_NONE, audio->GetAudioDelayOffset(handle, delayOffset));
+    EXPECT_EQ(15u, delayOffset);
+
+    audio->Release();
+}
+
 TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_AudioLevelAndGain)
 {
     EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
@@ -1126,6 +1192,38 @@ TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_VideoPortEnable)
         .WillOnce(::testing::Return(dsERR_NONE));
 
     EXPECT_EQ(Core::ERROR_NONE, videoPort->EnableVideoPort(handle, true));
+
+    videoPort->Release();
+}
+
+TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_IsVideoPortEnabled)
+{
+    EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_NE(nullptr, m_deviceSettingsPlugin);
+
+    Exchange::IDeviceSettingsVideoPort* videoPort =
+        m_deviceSettingsPlugin->QueryInterface<Exchange::IDeviceSettingsVideoPort>();
+    ASSERT_NE(nullptr, videoPort);
+
+    EXPECT_CALL(*p_dsVideoPortHalMock, dsGetVideoPort(::testing::_, ::testing::_, ::testing::_))
+        .WillOnce(::testing::Invoke([](dsVideoPortType_t, int, intptr_t* handle) {
+            *handle = 1;
+            return dsERR_NONE;
+        }));
+    int32_t handle = -1;
+    EXPECT_EQ(Core::ERROR_NONE,
+        videoPort->GetVideoPort(Exchange::IDeviceSettingsVideoPort::DS_VIDEO_PORT_TYPE_HDMI, 0, handle));
+
+    EXPECT_CALL(*p_dsVideoPortHalMock, dsIsVideoPortEnabled(handle, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke([](intptr_t, bool* enabled) {
+            *enabled = true;
+            return dsERR_NONE;
+        }));
+
+    bool enabled = false;
+    EXPECT_EQ(Core::ERROR_NONE, videoPort->IsVideoPortEnabled(handle, enabled));
+    EXPECT_TRUE(enabled);
 
     videoPort->Release();
 }

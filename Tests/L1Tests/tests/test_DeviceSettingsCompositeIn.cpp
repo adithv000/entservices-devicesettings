@@ -124,3 +124,19 @@ TEST_F(DeviceSettingsCompositeInTest, SelectCompositeInPortHalFailure)
 
     EXPECT_EQ(Core::ERROR_GENERAL, compositeIn->SelectCompositeInPort(CompositeInPort::DS_COMPOSITE_IN_PORT_0));
 }
+
+TEST_F(DeviceSettingsCompositeInTest, ScaleCompositeInVideo)
+{
+    ASSERT_NE(nullptr, compositeIn);
+
+    EXPECT_CALL(*p_dsCompositeInHalMock, dsCompositeInScaleVideo(0, 0, 1280, 720))
+        .Times(1)
+        .WillOnce(Return(dsERR_NONE));
+
+    Exchange::IDeviceSettingsCompositeIn::VideoRectangle rect{};
+    rect.x = 0;
+    rect.y = 0;
+    rect.width = 1280;
+    rect.height = 720;
+    EXPECT_EQ(Core::ERROR_NONE, compositeIn->ScaleCompositeInVideo(rect));
+}

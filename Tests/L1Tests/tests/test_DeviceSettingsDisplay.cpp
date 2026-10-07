@@ -30,6 +30,8 @@ using ::testing::Invoke;
 
 using DisplayPortType = Exchange::IDeviceSettingsDisplay::DisplayPortType;
 using DisplayVideoAspectRatio = Exchange::IDeviceSettingsDisplay::DisplayVideoAspectRatio;
+using DisplayAVIContentType = Exchange::IDeviceSettingsDisplay::DisplayAVIContentType;
+using DisplayAVIScanInformation = Exchange::IDeviceSettingsDisplay::DisplayAVIScanInformation;
 
 class DeviceSettingsDisplayTest : public ::testing::Test {
 protected:
@@ -131,4 +133,60 @@ TEST_F(DeviceSettingsDisplayTest, SetAllmEnabledCallsHalSetWhenStateDiffers)
         .WillOnce(Return(dsERR_NONE));
 
     EXPECT_EQ(Core::ERROR_NONE, display->SetAllmEnabled(handle, true));
+}
+
+TEST_F(DeviceSettingsDisplayTest, GetDisplayEdidBytes)
+{
+    ASSERT_NE(nullptr, display);
+    int32_t handle = GetHandle();
+
+    EXPECT_CALL(*p_dsDisplayHalMock, dsGetEDIDBytes(handle, ::testing::_, ::testing::_))
+        .Times(1)
+        .WillOnce(Invoke([](intptr_t, unsigned char* edid, int* length) {
+            edid[0] = 0x01;
+            *length = 1;
+            return dsERR_NONE;
+        }));
+
+    uint8_t edIdBytes[16] = {0};
+    EXPECT_EQ(Core::ERROR_NONE, display->GetDisplayEdidBytes(handle, edIdBytes, sizeof(edIdBytes)));
+    EXPECT_EQ(0x01, edIdBytes[0]);
+}
+
+TEST_F(DeviceSettingsDisplayTest, SetAVIContentType)
+{
+    ASSERT_NE(nullptr, display);
+    int32_t handle = GetHandle();
+
+    // Check-then-set pattern, same as SetAllmEnabled.
+    EXPECT_CALL(*p_dsDisplayHalMock, dsGetAVIContentType(handle, ::testing::_))
+        .WillOnce(Invoke([](intptr_t, dsAviContentType_t* contentType) {
+            *contentType = static_cast<dsAviContentType_t>(DisplayAVIContentType::DS_DISPLAY_AVI_CONTENT_GRAPHICS);
+            return dsERR_NONE;
+        }));
+    EXPECT_CALL(*p_dsDisplayHalMock,
+        dsSetAVIContentType(handle, static_cast<dsAviContentType_t>(DisplayAVIContentType::DS_DISPLAY_AVI_CONTENT_GAME)))
+        .Times(1)
+        .WillOnce(Return(dsERR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE, display->SetAVIContentType(handle, DisplayAVIContentType::DS_DISPLAY_AVI_CONTENT_GAME));
+}
+
+TEST_F(DeviceSettingsDisplayTest, SetAVIScanInformation)
+{
+    ASSERT_NE(nullptr, display);
+    int32_t handle = GetHandle();
+
+    EXPECT_CALL(*p_dsDisplayHalMock, dsGetAVIScanInformation(handle, ::testing::_))
+        .WillOnce(Invoke([](intptr_t, dsAVIScanInformation_t* scanInfo) {
+            *scanInfo = static_cast<dsAVIScanInformation_t>(DisplayAVIScanInformation::DS_DISPLAY_AVI_SCAN_NO_DATA);
+            return dsERR_NONE;
+        }));
+    EXPECT_CALL(*p_dsDisplayHalMock,
+        dsSetAVIScanInformation(handle, static_cast<dsAVIScanInformation_t>(DisplayAVIScanInformation::DS_DISPLAY_AVI_SCAN_OVERSCAN)))
+        .Times(1)
+        .WillOnce(Return(dsERR_NONE));
+
+    EXPECT_EQ(Core::ERROR_NONE,
+        display->SetAVIScanInformation(handle, DisplayAVIScanInformation::DS_DISPLAY_AVI_SCAN_OVERSCAN));
 }
