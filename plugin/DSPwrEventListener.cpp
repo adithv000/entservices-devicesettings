@@ -52,6 +52,7 @@ DSPwrEventListener::DSPwrEventListener()
     , _pwrConnectThreadID(0)
     , _stopThread(false)
     , _initialized(false)
+    , _pwrEventHandlerThreadStarted(false)
     , _pwrConnectThreadStarted(false)
     , _registeredPowerEventHandler(false)
     , _curState(PowerState::POWER_STATE_STANDBY)
@@ -253,6 +254,9 @@ void DSPwrEventListener::Init(PluginHost::IShell* service)
     _stopThread = false;
     if (pthread_create(&_pwrEventHandlerThreadID, NULL, PwrEventHandlingThreadFunc, this) != 0) {
         DSLOG_ERR("DSMgr PwrEventHandlingThread creation failed");
+        _pwrEventHandlerThreadStarted = false;
+    } else {
+        _pwrEventHandlerThreadStarted = true;
     }
     _initialized = true;
 
@@ -276,7 +280,10 @@ void DSPwrEventListener::Deinit()
     pthread_mutex_unlock(&_pwrEventMutexLock);
 
     DSLOG_INFO("Before joining thread");
-    pthread_join(_pwrEventHandlerThreadID, NULL);
+    if (_pwrEventHandlerThreadStarted) {
+        pthread_join(_pwrEventHandlerThreadID, NULL);
+        _pwrEventHandlerThreadStarted = false;
+    }
     DSLOG_INFO("Completed joining thread");
 
     if (_pwrConnectThreadStarted) {
@@ -676,7 +683,10 @@ void DSPwrEventListener::DeinitPwrControllerEvt()
     pthread_mutex_unlock(&_pwrEventMutexLock);
 
     DSLOG_INFO("Before joining thread");
-    pthread_join(_pwrEventHandlerThreadID, NULL);
+    if (_pwrEventHandlerThreadStarted) {
+        pthread_join(_pwrEventHandlerThreadID, NULL);
+        _pwrEventHandlerThreadStarted = false;
+    }
     DSLOG_INFO("Completed joining thread");
 
     // Clean the queue with guarding mutex

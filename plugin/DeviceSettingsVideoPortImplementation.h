@@ -178,6 +178,14 @@ namespace Plugin {
         std::vector<VideoPortPortConfig> _cachedVideoPorts;
         std::vector<VideoPortResolution> _cachedVideoPortResolutions;
 
+        // Tracks VideoPortNotificationJob instances submitted to the worker pool. The job stores a
+        // raw `this` pointer with no lifetime protection of its own, so the destructor must Revoke()
+        // every still-queued/in-flight job (blocking until any in-flight Dispatch() finishes) before
+        // this object's members are torn down - otherwise a worker thread can invoke Dispatch() on an
+        // already-freed instance.
+        mutable Core::CriticalSection _jobLock;
+        std::vector<Core::ProxyType<Core::IDispatch>> _pendingJobs;
+
         VideoPort _videoPort;
 
     public:

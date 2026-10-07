@@ -156,6 +156,7 @@ private:
     pthread_mutex_t _pwrEventQueueMutexLock;
     std::atomic<bool> _stopThread;
     bool _initialized;
+    bool _pwrEventHandlerThreadStarted;
     bool _pwrConnectThreadStarted;
     bool _registeredPowerEventHandler;
     

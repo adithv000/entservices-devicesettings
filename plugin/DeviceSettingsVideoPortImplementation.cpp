@@ -37,6 +37,8 @@ namespace Plugin {
         _VideoPortNotifications(),
         _apiLock(),
         _callbackLock(),
+        _jobLock(),
+        _pendingJobs(),
         _videoPort(VideoPort::Create(*this))
     {
         DSLOG_INFO("Constructor - Instance Address: %p", this);
@@ -44,6 +46,19 @@ namespace Plugin {
 
     DeviceSettingsVideoPortImpl::~DeviceSettingsVideoPortImpl() {
         DSLOG_INFO("Destructor - Instance Address: %p", this);
+
+        // Revoke every still-queued/in-flight VideoPortNotificationJob first: each job stores a raw
+        // `this` pointer and calls Dispatch() on it from a worker-pool thread, so letting one run (or
+        // keep running) after this object starts tearing down its members would be a use-after-free.
+        // Revoke() blocks (default: indefinitely) until an already-executing Dispatch() returns.
+        std::vector<Core::ProxyType<Core::IDispatch>> pendingJobs;
+        _jobLock.Lock();
+        pendingJobs.swap(_pendingJobs);
+        _jobLock.Unlock();
+        for (auto& job : pendingJobs) {
+            Core::IWorkerPool::Instance().Revoke(job);
+        }
+
         std::list<std::pair<string, Exchange::IDeviceSettingsVideoPort::INotification*>> notifications;
         _callbackLock.Lock();
         notifications.swap(_VideoPortNotifications);
@@ -54,8 +69,11 @@ namespace Plugin {
     }
 
     void DeviceSettingsVideoPortImpl::submitVideoPortEvent(Event ev, ParamsType params) {
-        Core::IWorkerPool::Instance().Submit(
-            VideoPortNotificationJob::Create(this, ev, std::move(params)));
+        Core::ProxyType<Core::IDispatch> job(VideoPortNotificationJob::Create(this, ev, std::move(params)));
+        _jobLock.Lock();
+        _pendingJobs.push_back(job);
+        _jobLock.Unlock();
+        Core::IWorkerPool::Instance().Submit(job);
     }
 
     void DeviceSettingsVideoPortImpl::Dispatch(Event ev, const ParamsType& params) {

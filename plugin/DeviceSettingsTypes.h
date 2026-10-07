@@ -29,6 +29,7 @@
 #include <cstring>
 #include <mutex>
 #include <condition_variable>
+#include <thread>
 #include <unistd.h>
 #include "DeviceSettingsLogger.h" // GuardedCallback::Invoke() below uses DSLOG_ERR
 
@@ -71,9 +72,18 @@ public:
     }
 
     // Blocks until all Invoke() calls already in flight have returned, then clears the callback.
+    // If called from the same thread that is currently inside Invoke() for this instance (e.g. a
+    // callback body that, directly or indirectly, tears down/re-registers itself), blocking here
+    // would deadlock forever since that in-flight Invoke() can never reach its own decrement while
+    // waiting on us. Detect that reentrant case and clear immediately without waiting instead.
     void Reset()
     {
         std::unique_lock<std::mutex> lock(_mutex);
+        if (_active > 0 && _activeThreadId == std::this_thread::get_id()) {
+            DSLOG_ERR("GuardedCallback::Reset: reentrant call from within Invoke() on the same thread, skipping drain wait");
+            _fn = nullptr;
+            return;
+        }
         _drained.wait(lock, [this] { return _active == 0; });
         _fn = nullptr;
     }
@@ -89,6 +99,7 @@ public:
             }
             local = _fn;
             ++_active;
+            _activeThreadId = std::this_thread::get_id();
         }
         // Dispatchers are registered as raw C function pointers with the HAL; an exception
         // unwinding back across that boundary is undefined behavior, so it must stop here.
@@ -115,6 +126,7 @@ private:
     std::condition_variable _drained;
     FunctionType _fn;
     int _active = 0;
+    std::thread::id _activeThreadId{};
 };
 
 inline profile_t searchRdkProfile(void) {

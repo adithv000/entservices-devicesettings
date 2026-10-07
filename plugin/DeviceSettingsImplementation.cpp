@@ -147,12 +147,10 @@ namespace Plugin {
     DeviceSettingsImp::~DeviceSettingsImp() {
         DSLOG_INFO("Destructor - Instance Address: %p", this);
 
-        // Tear down DSController FIRST: its destructor stops/joins the power-event
-        // listener's retry thread (PwrControllerFetchNinitStateValues() et al. touch
-        // the component implementations below). Deleting the components before this
-        // thread is joined would let it run against already-destroyed components.
+        // Tear down DSController FIRST (before the components it's registered with/joins threads against).
+        // Release(), not delete: DSController is ref-counted, and Display/VideoPort hold refs while dispatching.
         if (_dsController != nullptr) {
-            delete _dsController;
+            _dsController->Release();
             _dsController = nullptr;
         }
 
