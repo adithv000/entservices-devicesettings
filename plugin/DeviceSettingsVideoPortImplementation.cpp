@@ -47,10 +47,11 @@ namespace Plugin {
     DeviceSettingsVideoPortImpl::~DeviceSettingsVideoPortImpl() {
         DSLOG_INFO("Destructor - Instance Address: %p", this);
 
-        // Revoke every still-queued/in-flight VideoPortNotificationJob first: each job stores a raw
-        // `this` pointer and calls Dispatch() on it from a worker-pool thread, so letting one run (or
-        // keep running) after this object starts tearing down its members would be a use-after-free.
-        // Revoke() blocks (default: indefinitely) until an already-executing Dispatch() returns.
+        // Quiesce the HAL callback source first: blocks until any in-flight HAL callback
+        // returns and guarantees no further OnResolutionPostChange() (and hence no further
+        // submitVideoPortEvent()) can occur, so the job snapshot below is final.
+        _videoPort.Terminate();
+
         std::vector<Core::ProxyType<Core::IDispatch>> pendingJobs;
         _jobLock.Lock();
         pendingJobs.swap(_pendingJobs);
@@ -74,6 +75,15 @@ namespace Plugin {
         _pendingJobs.push_back(job);
         _jobLock.Unlock();
         Core::IWorkerPool::Instance().Submit(job);
+    }
+
+    void DeviceSettingsVideoPortImpl::removeCompletedJob(Core::IDispatch* job) {
+        _jobLock.Lock();
+        _pendingJobs.erase(
+            std::remove_if(_pendingJobs.begin(), _pendingJobs.end(),
+                [job](const Core::ProxyType<Core::IDispatch>& entry) { return entry.operator->() == job; }),
+            _pendingJobs.end());
+        _jobLock.Unlock();
     }
 
     void DeviceSettingsVideoPortImpl::Dispatch(Event ev, const ParamsType& params) {

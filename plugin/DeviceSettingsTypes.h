@@ -30,6 +30,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <thread>
+#include <set>
 #include <unistd.h>
 #include "DeviceSettingsLogger.h" // GuardedCallback::Invoke() below uses DSLOG_ERR
 
@@ -71,20 +72,26 @@ public:
         _fn = std::move(fn);
     }
 
-    // Blocks until all Invoke() calls already in flight have returned, then clears the callback.
-    // If called from the same thread that is currently inside Invoke() for this instance (e.g. a
-    // callback body that, directly or indirectly, tears down/re-registers itself), blocking here
-    // would deadlock forever since that in-flight Invoke() can never reach its own decrement while
-    // waiting on us. Detect that reentrant case and clear immediately without waiting instead.
+    // Blocks until every Invoke() in flight on OTHER threads has returned, then clears the
+    // callback. A single thread id can't represent concurrent invocations, so every active
+    // invocation's thread id is tracked individually: this lets Reset() skip waiting on the
+    // calling thread's own (reentrant) invocation - which can never finish while blocked here -
+    // while still correctly draining any other thread's genuinely in-flight call.
     void Reset()
     {
         std::unique_lock<std::mutex> lock(_mutex);
-        if (_active > 0 && _activeThreadId == std::this_thread::get_id()) {
-            DSLOG_ERR("GuardedCallback::Reset: reentrant call from within Invoke() on the same thread, skipping drain wait");
-            _fn = nullptr;
-            return;
+        const auto self = std::this_thread::get_id();
+        if (_activeThreads.count(self) > 0) {
+            DSLOG_ERR("GuardedCallback::Reset: reentrant call from within Invoke() on the same thread, skipping self-wait");
         }
-        _drained.wait(lock, [this] { return _active == 0; });
+        _drained.wait(lock, [this, self] {
+            for (const auto& id : _activeThreads) {
+                if (id != self) {
+                    return false;
+                }
+            }
+            return true;
+        });
         _fn = nullptr;
     }
 
@@ -92,25 +99,26 @@ public:
     void Invoke(Args&&... args)
     {
         FunctionType local;
+        const auto self = std::this_thread::get_id();
         {
             std::lock_guard<std::mutex> lock(_mutex);
             if (!_fn) {
                 return;
             }
             local = _fn;
-            ++_active;
-            _activeThreadId = std::this_thread::get_id();
+            _activeThreads.insert(self);
         }
         // Dispatchers are registered as raw C function pointers with the HAL; an exception
         // unwinding back across that boundary is undefined behavior, so it must stop here.
-        // Caught (not just RAII-unwound), so the _active decrement below always runs.
+        // Caught (not just RAII-unwound), so the removal below always runs.
         try {
             local(std::forward<Args>(args)...);
         } catch (...) {
             DSLOG_ERR("GuardedCallback::Invoke: callback threw, exception suppressed");
         }
         std::lock_guard<std::mutex> lock(_mutex);
-        if (--_active == 0) {
+        _activeThreads.erase(_activeThreads.find(self));
+        if (_activeThreads.empty()) {
             _drained.notify_all();
         }
     }
@@ -125,8 +133,7 @@ private:
     mutable std::mutex _mutex;
     std::condition_variable _drained;
     FunctionType _fn;
-    int _active = 0;
-    std::thread::id _activeThreadId{};
+    std::multiset<std::thread::id> _activeThreads;
 };
 
 inline profile_t searchRdkProfile(void) {

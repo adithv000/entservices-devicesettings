@@ -21,6 +21,7 @@
 
 #include "Module.h"
 
+#include <algorithm>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -80,7 +81,10 @@ namespace Plugin {
                     Core::ProxyType<VideoPortNotificationJob>::Create(impl, ev, std::move(params)));
             }
 
-            void Dispatch() override { _impl->Dispatch(_ev, _params); }
+            void Dispatch() override {
+                _impl->Dispatch(_ev, _params);
+                _impl->removeCompletedJob(this);
+            }
         private:
             DeviceSettingsVideoPortImpl* _impl;
             Event _ev;
@@ -89,9 +93,6 @@ namespace Plugin {
 
         // Submit async job to worker pool; HAL callback thread returns immediately.
         void submitVideoPortEvent(Event ev, ParamsType params);
-
-        // Called on worker thread by VideoPortNotificationJob::Dispatch().
-        void Dispatch(Event ev, const ParamsType& params);
 
         // Sync: delivers notification on the calling thread (used for all other events)
         template<typename Func, typename... Args>
@@ -168,6 +169,15 @@ namespace Plugin {
                               std::vector<Exchange::IDeviceSettings::VideoPortResolutionConfig>& videoPortResolutions) const;
 
     private:
+        // Called on worker thread by VideoPortNotificationJob::Dispatch(). Nested classes have
+        // access to the enclosing class's private members since C++11, so this - like
+        // removeCompletedJob() below - is intentionally not part of the public API.
+        void Dispatch(Event ev, const ParamsType& params);
+
+        // Called by VideoPortNotificationJob::Dispatch() once finished, so _pendingJobs
+        // doesn't grow unbounded over the plugin's lifetime.
+        void removeCompletedJob(Core::IDispatch* job);
+
         std::list<std::pair<string, Exchange::IDeviceSettingsVideoPort::INotification*>> _VideoPortNotifications;
 
         // Thread-safety locks

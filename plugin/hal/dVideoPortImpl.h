@@ -96,9 +96,14 @@ public:
     virtual ~dVideoPortImpl()
     {
         DSLOG_INFO("Destructor");
-        // Terminate the HAL first so no further asynchronous callbacks can be
-        // dispatched, then Reset() below blocks until any invocation already
-        // in flight completes before this instance is destroyed.
+        Terminate();
+    }
+
+    // Stops the HAL from generating further events and blocks until any callback
+    // invocation already in flight completes. Idempotent - safe to call explicitly
+    // (to quiesce before tearing down dependent state) and again from the destructor.
+    void Terminate()
+    {
         DeInitialiseHAL();
         g_VideoPortResolutionPreChangeCallback.Reset();
         g_VideoPortResolutionPostChangeCallback.Reset();
