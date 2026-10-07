@@ -190,7 +190,7 @@ uint32_t dCompositeInAIDLImpl::GetNrOfCompositeInputs(int32_t& nrCompositeInputs
     const android::sp<Manager> manager = _manager != nullptr ? _manager : GetManager();
     std::vector<int32_t> portIds;
     if (manager == nullptr || !manager->getPortIds(&portIds).isOk()) {
-        return WPEFramework::Core::ERROR_UNAVAILABLE;
+        return WPEFramework::Core::ERROR_GENERAL;
     }
     nrCompositeInputs = static_cast<int32_t>(portIds.size());
     return WPEFramework::Core::ERROR_NONE;
@@ -202,7 +202,7 @@ uint32_t dCompositeInAIDLImpl::GetCompositeInStatus(CompositeInStatus& status)
     const android::sp<Manager> manager = _manager != nullptr ? _manager : GetManager();
     std::vector<int32_t> portIds;
     if (manager == nullptr || !manager->getPortIds(&portIds).isOk()) {
-        return WPEFramework::Core::ERROR_UNAVAILABLE;
+        return WPEFramework::Core::ERROR_GENERAL;
     }
 
     status.activePort = static_cast<CompositeInPort>(-1);
@@ -225,8 +225,7 @@ uint32_t dCompositeInAIDLImpl::SelectCompositeInPort(const CompositeInPort port)
     std::lock_guard<std::mutex> lock(_adminLock);
     const int32_t portId = static_cast<int32_t>(port);
     if (portId < 0) {
-        StopActivePort();
-        return WPEFramework::Core::ERROR_NONE;
+        return StopActivePort();
     }
 
     const android::sp<Manager> manager = _manager != nullptr ? _manager : GetManager();
@@ -235,7 +234,9 @@ uint32_t dCompositeInAIDLImpl::SelectCompositeInPort(const CompositeInPort port)
         return WPEFramework::Core::ERROR_UNAVAILABLE;
     }
 
-    StopActivePort();
+    if (StopActivePort() != WPEFramework::Core::ERROR_NONE) {
+        return WPEFramework::Core::ERROR_GENERAL;
+    }
     android::sp<ControllerListener> controllerListener = new ControllerListener(*this, portId);
     android::sp<EventListener> eventListener = new EventListener(*this, portId);
     android::sp<Controller> controller;
@@ -263,13 +264,13 @@ uint32_t dCompositeInAIDLImpl::ScaleCompositeInVideo(const CompositeInVideoRecta
 {
     std::lock_guard<std::mutex> lock(_adminLock);
     if (_activePortId < 0 || videoRect.width <= 0 || videoRect.height <= 0) {
-        return WPEFramework::Core::ERROR_BAD_REQUEST;
+        return WPEFramework::Core::ERROR_GENERAL;
     }
 
     const android::sp<PlaneControl> planeControl = GetPlaneControl();
     std::vector<Plane::SourcePlaneMapping> mappings;
     if (planeControl == nullptr || !planeControl->getVideoSourceDestinationPlaneMapping(&mappings).isOk()) {
-        return WPEFramework::Core::ERROR_UNAVAILABLE;
+        return WPEFramework::Core::ERROR_GENERAL;
     }
 
     int32_t planeIndex = -1;
@@ -280,7 +281,25 @@ uint32_t dCompositeInAIDLImpl::ScaleCompositeInVideo(const CompositeInVideoRecta
         }
     }
     if (planeIndex < 0) {
-        return WPEFramework::Core::ERROR_UNAVAILABLE;
+        return WPEFramework::Core::ERROR_GENERAL;
+    }
+
+    std::vector<Plane::PlaneCapabilities> capabilities;
+    if (!planeControl->getCapabilities(&capabilities).isOk()) {
+        return WPEFramework::Core::ERROR_GENERAL;
+    }
+    const Plane::PlaneCapabilities* planeCapabilities = nullptr;
+    for (const auto& capability : capabilities) {
+        if (capability.planeIndex == planeIndex) {
+            planeCapabilities = &capability;
+            break;
+        }
+    }
+    if (planeCapabilities == nullptr || videoRect.x < 0 || videoRect.y < 0
+        || videoRect.width > planeCapabilities->maxWidth || videoRect.height > planeCapabilities->maxHeight
+        || static_cast<int64_t>(videoRect.x) + videoRect.width > planeCapabilities->frameWidth
+        || static_cast<int64_t>(videoRect.y) + videoRect.height > planeCapabilities->frameHeight) {
+        return WPEFramework::Core::ERROR_GENERAL;
     }
 
     const std::vector<Plane::PropertyKVPair> properties = {
@@ -294,10 +313,13 @@ uint32_t dCompositeInAIDLImpl::ScaleCompositeInVideo(const CompositeInVideoRecta
     return result.isOk() && applied ? WPEFramework::Core::ERROR_NONE : WPEFramework::Core::ERROR_GENERAL;
 }
 
-void dCompositeInAIDLImpl::StopActivePort()
+uint32_t dCompositeInAIDLImpl::StopActivePort()
 {
+    uint32_t result = WPEFramework::Core::ERROR_NONE;
     if (_controller != nullptr) {
-        _controller->stop();
+        if (!_controller->stop().isOk()) {
+            result = WPEFramework::Core::ERROR_GENERAL;
+        }
     }
     if (_activePort != nullptr) {
         if (_eventListener != nullptr) {
@@ -305,7 +327,9 @@ void dCompositeInAIDLImpl::StopActivePort()
         }
         if (_controller != nullptr) {
             bool closed = false;
-            _activePort->close(_controller, &closed);
+            if (!_activePort->close(_controller, &closed).isOk() || !closed) {
+                result = WPEFramework::Core::ERROR_GENERAL;
+            }
         }
     }
     _eventListener.clear();
@@ -313,6 +337,7 @@ void dCompositeInAIDLImpl::StopActivePort()
     _controller.clear();
     _activePort.clear();
     _activePortId = -1;
+    return result;
 }
 
 void dCompositeInAIDLImpl::OnConnectionChanged(int32_t portId, bool connected)

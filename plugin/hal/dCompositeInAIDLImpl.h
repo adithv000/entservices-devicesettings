@@ -40,7 +40,7 @@ private:
 
     static android::sp<Manager> GetManager();
     static android::sp<PlaneControl> GetPlaneControl();
-    void StopActivePort();
+    uint32_t StopActivePort();
     void OnConnectionChanged(int32_t portId, bool connected);
     void OnSignalStatusChanged(int32_t portId, com::rdk::hal::compositeinput::SignalStatus signalStatus);
     void OnVideoModeChanged(int32_t portId, const com::rdk::hal::compositeinput::VideoResolution& resolution);
