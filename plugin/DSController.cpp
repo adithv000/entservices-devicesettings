@@ -672,7 +672,6 @@ namespace Plugin {
                 // Check if HDMI is connected
                 int32_t vHandle = GetVideoPortHandle(dsVIDEOPORT_TYPE_HDMI);
                 bool connected = false;
-                bool isSurround = false;
                 
                 if (vHandle != 0 && _deviceSettings) {
                     _deviceSettings->IsVideoPortDisplayConnected(vHandle, connected);
@@ -689,15 +688,8 @@ namespace Plugin {
                     // If auto, then force surround
                     currentMode = AudioStereoMode::AUDIO_STEREO_SURROUND;
                 }
-                
-                // Assume surround is supported
-                isSurround = true;
-                
-                if (!isSurround) {
-                    // If Surround not supported, then force Stereo
-                    currentMode = AudioStereoMode::AUDIO_STEREO_STEREO;
-                    DSLOG_INFO("Surround mode not Supported on HDMI ..Set Stereo");
-                }
+
+                // Surround is assumed supported; the sink's capability (GetVideoPortDisplaySurroundMode) is not consulted.
             }
             
             DSLOG_INFO("Audio mode for audio port %d is : %d", static_cast<int>(supportedPortTypes[i]), static_cast<int>(currentMode));
