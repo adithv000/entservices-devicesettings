@@ -73,10 +73,13 @@ public:
     }
 
     // Blocks until every Invoke() in flight on OTHER threads has returned, then clears the
-    // callback. A single thread id can't represent concurrent invocations, so every active
-    // invocation's thread id is tracked individually: this lets Reset() skip waiting on the
-    // calling thread's own (reentrant) invocation - which can never finish while blocked here -
-    // while still correctly draining any other thread's genuinely in-flight call.
+    // callback. A callback that reentrantly triggers Reset() on its own GuardedCallback (same
+    // thread, still inside Invoke()) can't be waited on - this thread can never finish its own
+    // Invoke() while stuck here - so that thread's own entry is excluded from the wait. This
+    // avoids a deadlock but does NOT guarantee the still-running callback frame is done
+    // touching whatever the caller tears down right after Reset() returns; treat the log line
+    // below as a real bug report (a callback must never synchronously trigger teardown of its
+    // own source), not noise.
     void Reset()
     {
         std::unique_lock<std::mutex> lock(_mutex);
@@ -118,9 +121,9 @@ public:
         }
         std::lock_guard<std::mutex> lock(_mutex);
         _activeThreads.erase(_activeThreads.find(self));
-        if (_activeThreads.empty()) {
-            _drained.notify_all();
-        }
+        // Always notify, even if other invocations remain: Reset()'s predicate (not this erase)
+        // decides whether it's actually safe to proceed, so an extra wakeup is just re-checked.
+        _drained.notify_all();
     }
 
     explicit operator bool() const
