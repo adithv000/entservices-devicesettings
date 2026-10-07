@@ -44,16 +44,18 @@
 #include <chrono>
 
 // Static global callback functions following HdmiIn pattern
-static std::function<void(const AudioPortType, const uint32_t, const bool)> g_AudioOutHotPlugCallback;
-static std::function<void(const AudioFormat)> g_AudioFormatUpdateCallback;
-static std::function<void(const DolbyAtmosCapability, const bool)> g_DolbyAtmosCapabilitiesChangedCallback;
-static std::function<void(const bool)> g_AssociatedAudioMixingChangedCallback;
-static std::function<void(const int32_t)> g_AudioFaderControlChangedCallback;
-static std::function<void(const std::string&)> g_AudioPrimaryLanguageChangedCallback;
-static std::function<void(const std::string&)> g_AudioSecondaryLanguageChangedCallback;
-static std::function<void(const AudioPortState)> g_AudioPortStateChangedCallback;
-static std::function<void(const float)> g_AudioLevelChangedCallback;
-static std::function<void(const AudioPortType, const AudioStereoMode)> g_AudioModeChangedCallback;
+// Each callback owns its own mutex/condition-variable (GuardedCallback) so one
+// callback type's invocation never blocks registration/invocation of another.
+static GuardedCallback<void(const AudioPortType, const uint32_t, const bool)> g_AudioOutHotPlugCallback;
+static GuardedCallback<void(const AudioFormat)> g_AudioFormatUpdateCallback;
+static GuardedCallback<void(const DolbyAtmosCapability, const bool)> g_DolbyAtmosCapabilitiesChangedCallback;
+static GuardedCallback<void(const bool)> g_AssociatedAudioMixingChangedCallback;
+static GuardedCallback<void(const int32_t)> g_AudioFaderControlChangedCallback;
+static GuardedCallback<void(const std::string&)> g_AudioPrimaryLanguageChangedCallback;
+static GuardedCallback<void(const std::string&)> g_AudioSecondaryLanguageChangedCallback;
+static GuardedCallback<void(const AudioPortState)> g_AudioPortStateChangedCallback;
+static GuardedCallback<void(const float)> g_AudioLevelChangedCallback;
+static GuardedCallback<void(const AudioPortType, const AudioStereoMode)> g_AudioModeChangedCallback;
 
 #ifdef IGNORE_EDID_LOGIC
 static bool g_AudioHdmiAuto = false;
@@ -462,6 +464,18 @@ public:
         for (int i = 0; i < dsAUDIOPORT_TYPE_MAX; i++) {
             _audioPortEnabled[i] = false;
         }
+        // Precheck: drop any callback left over from a prior (already destroyed) instance.
+        // Reset() blocks until any invocation still in flight from that prior instance completes.
+        g_AudioOutHotPlugCallback.Reset();
+        g_AudioFormatUpdateCallback.Reset();
+        g_DolbyAtmosCapabilitiesChangedCallback.Reset();
+        g_AssociatedAudioMixingChangedCallback.Reset();
+        g_AudioFaderControlChangedCallback.Reset();
+        g_AudioPrimaryLanguageChangedCallback.Reset();
+        g_AudioSecondaryLanguageChangedCallback.Reset();
+        g_AudioPortStateChangedCallback.Reset();
+        g_AudioLevelChangedCallback.Reset();
+        g_AudioModeChangedCallback.Reset();
         InitialiseHAL();
     }
 
@@ -507,6 +521,10 @@ public:
         stopAudioLevelPersistThread();
 #endif
 
+        // Terminate the HAL first so no further asynchronous callbacks can be
+        // dispatched, then clear the global handlers below under the same lock
+        // the dispatch/notify functions use, which drains any invocation already
+        // in flight before this instance is destroyed.
         if (_isInitialized) {
             try {
                 dsError_t ret = dsAudioPortTerm();
@@ -518,6 +536,19 @@ public:
             }
             _isInitialized = false;
         }
+
+        // Reset() blocks until any invocation already in flight completes before clearing,
+        // so this instance cannot be destroyed while a dispatch thread is still inside it.
+        g_AudioOutHotPlugCallback.Reset();
+        g_AudioFormatUpdateCallback.Reset();
+        g_DolbyAtmosCapabilitiesChangedCallback.Reset();
+        g_AssociatedAudioMixingChangedCallback.Reset();
+        g_AudioFaderControlChangedCallback.Reset();
+        g_AudioPrimaryLanguageChangedCallback.Reset();
+        g_AudioSecondaryLanguageChangedCallback.Reset();
+        g_AudioPortStateChangedCallback.Reset();
+        g_AudioLevelChangedCallback.Reset();
+        g_AudioModeChangedCallback.Reset();
         EXIT_LOG;
     }
 
@@ -1388,9 +1419,7 @@ public:
                     DSLOG_INFO("applied successfully: handle=%d, volume=%d", handle, volume);
                     
                     // Send audio level change event through callback if available
-                    if (g_AudioLevelChangedCallback) {
-                        g_AudioLevelChangedCallback(static_cast<float>(volume));
-                    }
+                    g_AudioLevelChangedCallback.Invoke(static_cast<float>(volume));
                 } else {
                     DSLOG_ERR("dsSetAudioLevel failed with error: %d", ret);
                     return WPEFramework::Core::ERROR_GENERAL;
@@ -5693,9 +5722,7 @@ private:
         }
         
         // Call Audio event handler through global callback if available
-        if (g_AudioOutHotPlugCallback) {
-            g_AudioOutHotPlugCallback(wpePortType, static_cast<uint32_t>(uiPortNo), isPortConnected);
-        }
+        g_AudioOutHotPlugCallback.Invoke(wpePortType, static_cast<uint32_t>(uiPortNo), isPortConnected);
     }
     
     // audioFormatUpdateCallback implementation
@@ -5707,9 +5734,7 @@ private:
         AudioFormat wpeFormat = static_cast<AudioFormat>(audioFormat);
         
         // Call Audio event handler through global callback if available
-        if (g_AudioFormatUpdateCallback) {
-            g_AudioFormatUpdateCallback(wpeFormat);
-        }
+        g_AudioFormatUpdateCallback.Invoke(wpeFormat);
     }
     
     // audioAtmosCapsChangeCallback implementation  
@@ -5721,9 +5746,7 @@ private:
         DolbyAtmosCapability wpeAtmosCaps = static_cast<DolbyAtmosCapability>(atmosCaps);
         
         // Call Audio event handler through global callback if available
-        if (g_DolbyAtmosCapabilitiesChangedCallback) {
-            g_DolbyAtmosCapabilitiesChangedCallback(wpeAtmosCaps, status);
-        }
+        g_DolbyAtmosCapabilitiesChangedCallback.Invoke(wpeAtmosCaps, status);
     }
     
     // State Change Notification Functions using global callbacks
@@ -5732,9 +5755,7 @@ private:
     {
         DSLOG_INFO("Associated audio mixing changed: %s", mixing ? "enabled" : "disabled");
         // Call Audio event handler using global callback if available
-        if (g_AssociatedAudioMixingChangedCallback) {
-            g_AssociatedAudioMixingChangedCallback(mixing);
-        }
+        g_AssociatedAudioMixingChangedCallback.Invoke(mixing);
     }
     
     // notifyAudioFaderControlChanged implementation
@@ -5742,9 +5763,7 @@ private:
     {
         DSLOG_INFO("Audio fader control changed: mixerBalance=%d", mixerBalance);
         // Call Audio event handler using global callback if available
-        if (g_AudioFaderControlChangedCallback) {
-            g_AudioFaderControlChangedCallback(mixerBalance);
-        }
+        g_AudioFaderControlChangedCallback.Invoke(mixerBalance);
     }
     
     // notifyAudioPrimaryLanguageChanged implementation
@@ -5752,9 +5771,7 @@ private:
     {
         DSLOG_INFO("Audio primary language changed: %s", primaryLanguage.c_str());
         // Call Audio event handler using global callback if available
-        if (g_AudioPrimaryLanguageChangedCallback) {
-            g_AudioPrimaryLanguageChangedCallback(primaryLanguage);
-        }
+        g_AudioPrimaryLanguageChangedCallback.Invoke(primaryLanguage);
     }
     
     // notifyAudioSecondaryLanguageChanged implementation
@@ -5762,9 +5779,7 @@ private:
     {
         DSLOG_INFO("Audio secondary language changed: %s", secondaryLanguage.c_str());
         // Call Audio event handler using global callback if available
-        if (g_AudioSecondaryLanguageChangedCallback) {
-            g_AudioSecondaryLanguageChangedCallback(secondaryLanguage);
-        }
+        g_AudioSecondaryLanguageChangedCallback.Invoke(secondaryLanguage);
     }
     
     // notifyAudioPortStateChanged implementation
@@ -5772,9 +5787,7 @@ private:
     {
         DSLOG_INFO("Audio port state changed: state=%d", static_cast<int>(audioPortState));
         // Call Audio event handler using global callback if available
-        if (g_AudioPortStateChangedCallback) {
-            g_AudioPortStateChangedCallback(audioPortState);
-        }
+        g_AudioPortStateChangedCallback.Invoke(audioPortState);
     }
     
     // notifyAudioLevelChanged implementation
@@ -5782,9 +5795,7 @@ private:
     {
         DSLOG_INFO("Audio level changed: audioLevel=%d", audioLevel);
         // Call Audio event handler using global callback if available
-        if (g_AudioLevelChangedCallback) {
-            g_AudioLevelChangedCallback(static_cast<float>(audioLevel));
-        }
+        g_AudioLevelChangedCallback.Invoke(static_cast<float>(audioLevel));
     }
     
     // notifyAudioModeChanged implementation
@@ -5792,9 +5803,7 @@ private:
     {
         DSLOG_INFO("Audio mode changed: portType=%d, mode=%d", static_cast<int>(portType), static_cast<int>(mode));
         // Call Audio event handler using global callback if available
-        if (g_AudioModeChangedCallback) {
-            g_AudioModeChangedCallback(portType, mode);
-        }
+        g_AudioModeChangedCallback.Invoke(portType, mode);
     }
 
     // Callback management implementation following HdmiIn pattern
@@ -5805,52 +5814,52 @@ private:
         // Register audio callbacks following HdmiIn pattern
         if (bundle.OnAudioOutHotPlug) {
             DSLOG_INFO("Audio Output Hot Plug Event Callback Registered");
-            g_AudioOutHotPlugCallback = bundle.OnAudioOutHotPlug;
+            g_AudioOutHotPlugCallback.Set(bundle.OnAudioOutHotPlug);
         }
         
         if (bundle.OnAudioFormatUpdate) {
             DSLOG_INFO("Audio Format Update Event Callback Registered");
-            g_AudioFormatUpdateCallback = bundle.OnAudioFormatUpdate;
+            g_AudioFormatUpdateCallback.Set(bundle.OnAudioFormatUpdate);
         }
         
         if (bundle.OnDolbyAtmosCapabilitiesChanged) {
             DSLOG_INFO("Dolby Atmos Capabilities Changed Event Callback Registered");
-            g_DolbyAtmosCapabilitiesChangedCallback = bundle.OnDolbyAtmosCapabilitiesChanged;
+            g_DolbyAtmosCapabilitiesChangedCallback.Set(bundle.OnDolbyAtmosCapabilitiesChanged);
         }
         
         if (bundle.OnAssociatedAudioMixingChanged) {
             DSLOG_INFO("Associated Audio Mixing Changed Event Callback Registered");
-            g_AssociatedAudioMixingChangedCallback = bundle.OnAssociatedAudioMixingChanged;
+            g_AssociatedAudioMixingChangedCallback.Set(bundle.OnAssociatedAudioMixingChanged);
         }
         
         if (bundle.OnAudioFaderControlChanged) {
             DSLOG_INFO("Audio Fader Control Changed Event Callback Registered");
-            g_AudioFaderControlChangedCallback = bundle.OnAudioFaderControlChanged;
+            g_AudioFaderControlChangedCallback.Set(bundle.OnAudioFaderControlChanged);
         }
         
         if (bundle.OnAudioPrimaryLanguageChanged) {
             DSLOG_INFO("Audio Primary Language Changed Event Callback Registered");
-            g_AudioPrimaryLanguageChangedCallback = bundle.OnAudioPrimaryLanguageChanged;
+            g_AudioPrimaryLanguageChangedCallback.Set(bundle.OnAudioPrimaryLanguageChanged);
         }
         
         if (bundle.OnAudioSecondaryLanguageChanged) {
             DSLOG_INFO("Audio Secondary Language Changed Event Callback Registered");
-            g_AudioSecondaryLanguageChangedCallback = bundle.OnAudioSecondaryLanguageChanged;
+            g_AudioSecondaryLanguageChangedCallback.Set(bundle.OnAudioSecondaryLanguageChanged);
         }
         
         if (bundle.OnAudioPortStateChanged) {
             DSLOG_INFO("Audio Port State Changed Event Callback Registered");
-            g_AudioPortStateChangedCallback = bundle.OnAudioPortStateChanged;
+            g_AudioPortStateChangedCallback.Set(bundle.OnAudioPortStateChanged);
         }
         
         if (bundle.OnAudioLevelChanged) {
             DSLOG_INFO("Audio Level Changed Event Callback Registered");
-            g_AudioLevelChangedCallback = bundle.OnAudioLevelChanged;
+            g_AudioLevelChangedCallback.Set(bundle.OnAudioLevelChanged);
         }
         
         if (bundle.OnAudioModeChanged) {
             DSLOG_INFO("Audio Mode Changed Event Callback Registered");
-            g_AudioModeChangedCallback = bundle.OnAudioModeChanged;
+            g_AudioModeChangedCallback.Set(bundle.OnAudioModeChanged);
         }
         
         DSLOG_INFO("Audio callbacks set successfully");

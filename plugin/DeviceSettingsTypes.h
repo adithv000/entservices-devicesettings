@@ -28,7 +28,11 @@
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <condition_variable>
+#include <thread>
+#include <set>
 #include <unistd.h>
+#include "DeviceSettingsLogger.h" // GuardedCallback::Invoke() below uses DSLOG_ERR
 
 // RDK profile search - inlined from UtilsSearchRDKProfile
 #define RDK_PROFILE "RDK_PROFILE="
@@ -43,6 +47,97 @@ typedef enum profile {
 } profile_t;
 
 extern profile_t profileType;
+
+// Wraps a single HAL event callback (std::function) with its own independent
+// mutex/condition-variable pair, so that:
+//  - Each callback has its own lock: invoking/registering one callback never
+//    blocks on another callback's invocation within the same HAL implementation.
+//  - Invoke() copies the callback under lock then calls it unlocked, so a slow
+//    or reentrant callback body never holds the lock.
+//  - Reset() (used by constructors/destructors) actually blocks until any
+//    invocation already in flight has returned before clearing the callback —
+//    a real drain barrier, not just protection for the std::function copy.
+template <typename Signature>
+class GuardedCallback {
+public:
+    using FunctionType = std::function<Signature>;
+
+    GuardedCallback() = default;
+    GuardedCallback(const GuardedCallback&) = delete;
+    GuardedCallback& operator=(const GuardedCallback&) = delete;
+
+    void Set(FunctionType fn)
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        _fn = std::move(fn);
+    }
+
+    // Blocks until every Invoke() in flight on OTHER threads has returned, then clears the
+    // callback. A callback that reentrantly triggers Reset() on its own GuardedCallback (same
+    // thread, still inside Invoke()) can't be waited on - this thread can never finish its own
+    // Invoke() while stuck here - so that thread's own entry is excluded from the wait. This
+    // avoids a deadlock but does NOT guarantee the still-running callback frame is done
+    // touching whatever the caller tears down right after Reset() returns; treat the log line
+    // below as a real bug report (a callback must never synchronously trigger teardown of its
+    // own source), not noise.
+    void Reset()
+    {
+        std::unique_lock<std::mutex> lock(_mutex);
+        const auto self = std::this_thread::get_id();
+        if (_activeThreads.count(self) > 0) {
+            DSLOG_ERR("GuardedCallback::Reset: reentrant call from within Invoke() on the same thread, skipping self-wait");
+        }
+        _drained.wait(lock, [this, self] {
+            for (const auto& id : _activeThreads) {
+                if (id != self) {
+                    return false;
+                }
+            }
+            return true;
+        });
+        _fn = nullptr;
+    }
+
+    template <typename... Args>
+    void Invoke(Args&&... args)
+    {
+        FunctionType local;
+        const auto self = std::this_thread::get_id();
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            if (!_fn) {
+                return;
+            }
+            local = _fn;
+            _activeThreads.insert(self);
+        }
+        // Dispatchers are registered as raw C function pointers with the HAL; an exception
+        // unwinding back across that boundary is undefined behavior, so it must stop here.
+        // Caught (not just RAII-unwound), so the removal below always runs.
+        try {
+            local(std::forward<Args>(args)...);
+        } catch (...) {
+            DSLOG_ERR("GuardedCallback::Invoke: callback threw, exception suppressed");
+        }
+        std::lock_guard<std::mutex> lock(_mutex);
+        _activeThreads.erase(_activeThreads.find(self));
+        // Always notify, even if other invocations remain: Reset()'s predicate (not this erase)
+        // decides whether it's actually safe to proceed, so an extra wakeup is just re-checked.
+        _drained.notify_all();
+    }
+
+    explicit operator bool() const
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return static_cast<bool>(_fn);
+    }
+
+private:
+    mutable std::mutex _mutex;
+    std::condition_variable _drained;
+    FunctionType _fn;
+    std::multiset<std::thread::id> _activeThreads;
+};
 
 inline profile_t searchRdkProfile(void) {
     const char* devPropPath = "/etc/device.properties";
@@ -89,7 +184,6 @@ inline profile_t searchRdkProfile(void) {
 #include <interfaces/IDeviceSettingsHost.h>
 #include <interfaces/IDeviceSettingsVideoDevice.h>
 #include <interfaces/IDeviceSettingsVideoPort.h>
-#include "DeviceSettingsLogger.h"
 
 #define USE_LEGACY_INTERFACE
 

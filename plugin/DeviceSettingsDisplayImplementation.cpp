@@ -39,6 +39,19 @@ namespace Plugin {
 
     DeviceSettingsDisplayImpl::~DeviceSettingsDisplayImpl() {
         DSLOG_INFO("Destructor - Instance Address: %p", this);
+
+        std::list<std::pair<string, IDisplayNotification*>> notifications;
+        std::list<std::pair<string, IDisplayHDMIHotPlugNotification*>> hotPlugNotifications;
+        _callbackLock.Lock();
+        notifications.swap(_DisplayNotifications);
+        hotPlugNotifications.swap(_DisplayHDMIHotPlugNotifications);
+        _callbackLock.Unlock();
+        for (auto& entry : notifications) {
+            entry.second->Release();
+        }
+        for (auto& entry : hotPlugNotifications) {
+            entry.second->Release();
+        }
     }
 
     template<typename Func, typename... Args>

@@ -110,22 +110,15 @@ set_target_properties(${PLUGIN_IMPLEMENTATION} PROPERTIES
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED YES)
 
-#if(RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
-#
-#    target_compile_definitions(${PLUGIN_IMPLEMENTATION}
-#                               PUBLIC
-#                                 PLATCO_BOOTTO_STANDBY
-#                                 ENABLE_THERMAL_PROTECTION
-#                                 OFFLINE_MAINT_REBOOT)
-#
-#   find_library(TESTMOCKLIB_LIBRARIES NAMES TestMocklib)
-#   if (TESTMOCKLIB_LIBRARIES)
-#       message ("linking mock libraries ${TESTMOCKLIB_LIBRARIES} library")
-#       target_link_libraries(${PLUGIN_IMPLEMENTATION} PRIVATE ${TESTMOCKLIB_LIBRARIES})
-#   else (TESTMOCKLIB_LIBRARIES)
-#       message ("Require ${TESTMOCKLIB_LIBRARIES} library")
-#   endif ()
-#endif ()
+if(RDK_SERVICES_L1_TEST OR RDK_SERVICE_L2_TEST)
+    find_library(TESTMOCKLIB_LIBRARIES NAMES TestMocklib)
+    if(TESTMOCKLIB_LIBRARIES)
+        target_link_libraries(${PLUGIN_IMPLEMENTATION} PRIVATE ${TESTMOCKLIB_LIBRARIES})
+        message(STATUS "Linking ${PLUGIN_IMPLEMENTATION} against TestMocklib for telemetry mocks")
+    else()
+        message(WARNING "TestMocklib not found - telemetry mock symbols may not be available for tests")
+    endif()
+endif()
 
 if(PROCPS_LIBRARIES)
     target_link_libraries(${PLUGIN_IMPLEMENTATION} PRIVATE ${PROCPS_LIBRARIES})
@@ -133,6 +126,8 @@ endif()
 
 if(TELEMETRY_LIBRARIES)
     target_link_libraries(${PLUGIN_IMPLEMENTATION} PRIVATE ${TELEMETRY_LIBRARIES})
+else()
+    message(WARNING "Telemetry library not found - telemetry functionality will not be available")
 endif()
 
 if (MFR_FOUND)
