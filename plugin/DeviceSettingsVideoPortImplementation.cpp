@@ -37,6 +37,8 @@ namespace Plugin {
         _VideoPortNotifications(),
         _apiLock(),
         _callbackLock(),
+        _jobLock(),
+        _pendingJobs(),
         _videoPort(VideoPort::Create(*this))
     {
         DSLOG_INFO("Constructor - Instance Address: %p", this);
@@ -44,6 +46,20 @@ namespace Plugin {
 
     DeviceSettingsVideoPortImpl::~DeviceSettingsVideoPortImpl() {
         DSLOG_INFO("Destructor - Instance Address: %p", this);
+
+        // Quiesce the HAL callback source first: blocks until any in-flight HAL callback
+        // returns and guarantees no further OnResolutionPostChange() (and hence no further
+        // submitVideoPortEvent()) can occur, so the job snapshot below is final.
+        _videoPort.Terminate();
+
+        std::vector<Core::ProxyType<Core::IDispatch>> pendingJobs;
+        _jobLock.Lock();
+        pendingJobs.swap(_pendingJobs);
+        _jobLock.Unlock();
+        for (auto& job : pendingJobs) {
+            Core::IWorkerPool::Instance().Revoke(job);
+        }
+
         std::list<std::pair<string, Exchange::IDeviceSettingsVideoPort::INotification*>> notifications;
         _callbackLock.Lock();
         notifications.swap(_VideoPortNotifications);
@@ -54,8 +70,20 @@ namespace Plugin {
     }
 
     void DeviceSettingsVideoPortImpl::submitVideoPortEvent(Event ev, ParamsType params) {
-        Core::IWorkerPool::Instance().Submit(
-            VideoPortNotificationJob::Create(this, ev, std::move(params)));
+        Core::ProxyType<Core::IDispatch> job(VideoPortNotificationJob::Create(this, ev, std::move(params)));
+        _jobLock.Lock();
+        _pendingJobs.push_back(job);
+        _jobLock.Unlock();
+        Core::IWorkerPool::Instance().Submit(job);
+    }
+
+    void DeviceSettingsVideoPortImpl::removeCompletedJob(Core::IDispatch* job) {
+        _jobLock.Lock();
+        _pendingJobs.erase(
+            std::remove_if(_pendingJobs.begin(), _pendingJobs.end(),
+                [job](const Core::ProxyType<Core::IDispatch>& entry) { return entry.operator->() == job; }),
+            _pendingJobs.end());
+        _jobLock.Unlock();
     }
 
     void DeviceSettingsVideoPortImpl::Dispatch(Event ev, const ParamsType& params) {

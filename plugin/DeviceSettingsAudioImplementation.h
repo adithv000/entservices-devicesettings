@@ -267,16 +267,20 @@ namespace Plugin {
         template <typename T>
         Core::hresult Unregister(std::list<std::pair<string, T*>>& list, const T* notification);
 
-        Audio _audio;
-
-    public:
-        /** Called from DeviceSettingsImp::Configure() to trigger deferred HAL init. */
-        void InitialiseHAL() { _audio.InitialiseHAL(); }
+        // Declared before _audio: Audio::Create() synchronously fires HAL callbacks
+        // (e.g. OnAudioPortStateChanged) during construction, which dispatch through
+        // these members, so they must already be constructed when _audio initializes.
         std::list<std::pair<string, DeviceSettingsAudio::INotification*>> _AudioNotifications;
         mutable Core::CriticalSection _configLock;
         mutable Core::CriticalSection _callbackLock;
         std::vector<AudioTypeConfigInfo> _cachedAudioTypeConfigs;
         std::vector<AudioPortConfigInfo> _cachedAudioPortConfigs;
+
+        Audio _audio;
+
+    public:
+        /** Called from DeviceSettingsImp::Configure() to trigger deferred HAL init. */
+        void InitialiseHAL() { _audio.InitialiseHAL(); }
     };
 } // namespace Plugin
 } // namespace WPEFramework

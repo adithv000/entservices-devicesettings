@@ -65,6 +65,8 @@ public:
     void Platform_init();
     /** Deferred HAL init — called from DeviceSettingsImp::Configure() */
     void InitialiseHAL() { std::static_pointer_cast<DefaultImpl>(_platform)->InitialiseHAL(); }
+    /** Quiesces the HAL callback source; blocks until any in-flight callback returns. */
+    void Terminate() { std::static_pointer_cast<DefaultImpl>(_platform)->Terminate(); }
 
     uint32_t GetVideoPort(const VideoPortType videoPort, const int32_t index, int32_t &handle);
     uint32_t IsVideoPortEnabled(const int32_t handle, bool &enabled);

@@ -146,7 +146,14 @@ namespace Plugin {
 
     DeviceSettingsImp::~DeviceSettingsImp() {
         DSLOG_INFO("Destructor - Instance Address: %p", this);
-        
+
+        // Tear down DSController FIRST (before the components it's registered with/joins threads against).
+        // Release(), not delete: DSController is ref-counted, and Display/VideoPort hold refs while dispatching.
+        if (_dsController != nullptr) {
+            _dsController->Release();
+            _dsController = nullptr;
+        }
+
         // Clean up created implementation instances
         if (_fpdSettings != nullptr) {
             delete _fpdSettings;
@@ -182,12 +189,6 @@ namespace Plugin {
         if (_compositeInSettings != nullptr) {
             delete _compositeInSettings;
             _compositeInSettings = nullptr;
-        }
-        
-        // Clean up DSController last as it provides system infrastructure
-        if (_dsController != nullptr) {
-            delete _dsController;
-            _dsController = nullptr;
         }
 
         DeviceSettingsHALLoader::ReleaseAllLibraries();

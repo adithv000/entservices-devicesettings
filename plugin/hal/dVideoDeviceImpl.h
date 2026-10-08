@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cctype>
 #include <functional>
+#include <mutex>
 #include <iostream>
 #include <cstring>
 #include <dlfcn.h>
@@ -49,9 +50,11 @@ static dsVideoZoom_t srv_dfc = dsVIDEO_ZOOM_FULL;
 static bool force_disable_hdr = true;
 
 // Static global callbacks for VideoDevice events - following HdmiIn pattern
-static std::function<void(const VideoDeviceZoom)> g_VideoDeviceZoomSettingsChangedCallback;
-static std::function<void(const string)> g_VideoDeviceDisplayFrameratePreChangeCallback;
-static std::function<void(const string)> g_VideoDeviceDisplayFrameratePostChangeCallback;
+// Each callback owns its own mutex/condition-variable (GuardedCallback) so one
+// callback type's invocation never blocks registration/invocation of another.
+static GuardedCallback<void(const VideoDeviceZoom)> g_VideoDeviceZoomSettingsChangedCallback;
+static GuardedCallback<void(const string)> g_VideoDeviceDisplayFrameratePreChangeCallback;
+static GuardedCallback<void(const string)> g_VideoDeviceDisplayFrameratePostChangeCallback;
 
 class dVideoDeviceImpl : public hal::dVideoDevice::IPlatform {
 
@@ -63,13 +66,24 @@ public:
     dVideoDeviceImpl()
     {
         DSLOG_INFO("Constructor");
+        // Precheck: drop any callback left over from a prior (already destroyed) instance.
+        // Reset() blocks until any invocation still in flight from that prior instance completes.
+        g_VideoDeviceZoomSettingsChangedCallback.Reset();
+        g_VideoDeviceDisplayFrameratePreChangeCallback.Reset();
+        g_VideoDeviceDisplayFrameratePostChangeCallback.Reset();
         InitialiseHAL();
     }
 
     virtual ~dVideoDeviceImpl()
     {
         DSLOG_ERR("Destructor");
+        // Terminate the HAL first so no further asynchronous callbacks can be
+        // dispatched, then Reset() below blocks until any invocation already
+        // in flight completes before this instance is destroyed.
         DeInitialiseHAL();
+        g_VideoDeviceZoomSettingsChangedCallback.Reset();
+        g_VideoDeviceDisplayFrameratePreChangeCallback.Reset();
+        g_VideoDeviceDisplayFrameratePostChangeCallback.Reset();
     }
 
     // Singleton getInstance method - following HdmiIn pattern
@@ -169,9 +183,7 @@ public:
                     device::HostPersistence::getInstance().persistHostProperty("VideoDevice.DFC", "None");
                     
                     // Trigger zoom settings changed callback
-                    if (g_VideoDeviceZoomSettingsChangedCallback) {
-                        g_VideoDeviceZoomSettingsChangedCallback(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_NONE);
-                    }
+                    g_VideoDeviceZoomSettingsChangedCallback.Invoke(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_NONE);
                     
                     DSLOG_INFO(" SUCCESS (NONE)");
                 } else {
@@ -186,9 +198,7 @@ public:
                     device::HostPersistence::getInstance().persistHostProperty("VideoDevice.DFC", "Full");
                     
                     // Trigger zoom settings changed callback
-                    if (g_VideoDeviceZoomSettingsChangedCallback) {
-                        g_VideoDeviceZoomSettingsChangedCallback(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_FULL);
-                    }
+                    g_VideoDeviceZoomSettingsChangedCallback.Invoke(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_FULL);
                     
                     DSLOG_INFO(" SUCCESS (FULL)");
                 } else {
@@ -203,9 +213,7 @@ public:
                     device::HostPersistence::getInstance().persistHostProperty("VideoDevice.DFC", "Full");
                     
                     // Trigger zoom settings changed callback
-                    if (g_VideoDeviceZoomSettingsChangedCallback) {
-                        g_VideoDeviceZoomSettingsChangedCallback(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_16_9_ZOOM);
-                    }
+                    g_VideoDeviceZoomSettingsChangedCallback.Invoke(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_16_9_ZOOM);
                     
                     DSLOG_INFO(" SUCCESS (16_9_ZOOM)");
                 } else {
@@ -499,9 +507,7 @@ public:
         }
         
         // Send pre-change callback
-        if (g_VideoDeviceDisplayFrameratePreChangeCallback) {
-            g_VideoDeviceDisplayFrameratePreChangeCallback(framerate);
-        }
+        g_VideoDeviceDisplayFrameratePreChangeCallback.Invoke(framerate);
         
         if (0 != func) {
             char dsFramerate[32];
@@ -518,8 +524,8 @@ public:
         }
         
         // Send post-change callback (skip on invalid param, matching dsVideoDevice.c broadcast guard)
-        if (result != dsERR_INVALID_PARAM && g_VideoDeviceDisplayFrameratePostChangeCallback) {
-            g_VideoDeviceDisplayFrameratePostChangeCallback(std::move(framerate));
+        if (result != dsERR_INVALID_PARAM) {
+            g_VideoDeviceDisplayFrameratePostChangeCallback.Invoke(std::move(framerate));
         }
         
         return retCode;
@@ -541,14 +547,14 @@ public:
             // Register Zoom Settings Changed Callback
             if (bundle.OnZoomSettingsChanged) {
                 DSLOG_INFO("VideoDevice Zoom Settings Changed Event Callback Registered");
-                g_VideoDeviceZoomSettingsChangedCallback = bundle.OnZoomSettingsChanged;
+                g_VideoDeviceZoomSettingsChangedCallback.Set(bundle.OnZoomSettingsChanged);
                 // Zoom callbacks are triggered manually during DFC setting
             }
             
             // Register Display Framerate Pre-Change Callback - following dsVideoDevice.c pattern
             if (bundle.OnDisplayFrameratePreChange) {
                 DSLOG_INFO("VideoDevice Display Framerate Pre-Change Event Callback Registered");
-                g_VideoDeviceDisplayFrameratePreChangeCallback = bundle.OnDisplayFrameratePreChange;
+                g_VideoDeviceDisplayFrameratePreChangeCallback.Set(bundle.OnDisplayFrameratePreChange);
                 
                 // Register framerate pre-change callback with DS HAL - exact pattern from dsVideoDevice.c
                 dsError_t eRet = VideoDeviceRegisterFrameratePreChangeCB(VideoDeviceFramerateStatusPreChangeCB);
@@ -562,7 +568,7 @@ public:
             // Register Display Framerate Post-Change Callback - following dsVideoDevice.c pattern
             if (bundle.OnDisplayFrameratePostChange) {
                 DSLOG_INFO("VideoDevice Display Framerate Post-Change Event Callback Registered");
-                g_VideoDeviceDisplayFrameratePostChangeCallback = bundle.OnDisplayFrameratePostChange;
+                g_VideoDeviceDisplayFrameratePostChangeCallback.Set(bundle.OnDisplayFrameratePostChange);
                 
                 // Register framerate post-change callback with DS HAL - exact pattern from dsVideoDevice.c
                 dsError_t eRet = VideoDeviceRegisterFrameratePostChangeCB(VideoDeviceFramerateStatusPostChangeCB);
@@ -633,10 +639,8 @@ public:
         DSLOG_INFO(" inputStatus=%u", inputStatus);
         
         // Call the stored global callback if available
-        if (g_VideoDeviceDisplayFrameratePreChangeCallback) {
-            std::string framerate = std::to_string(inputStatus);
-            g_VideoDeviceDisplayFrameratePreChangeCallback(std::move(framerate));
-        }
+        std::string framerate = std::to_string(inputStatus);
+        g_VideoDeviceDisplayFrameratePreChangeCallback.Invoke(std::move(framerate));
     }
 
     static void VideoDeviceFramerateStatusPostChangeCB(unsigned int inputStatus)
@@ -644,10 +648,8 @@ public:
         DSLOG_INFO(" inputStatus=%u", inputStatus);
         
         // Call the stored global callback if available
-        if (g_VideoDeviceDisplayFrameratePostChangeCallback) {
-            std::string framerate = std::to_string(inputStatus);
-            g_VideoDeviceDisplayFrameratePostChangeCallback(std::move(framerate));
-        }
+        std::string framerate = std::to_string(inputStatus);
+        g_VideoDeviceDisplayFrameratePostChangeCallback.Invoke(std::move(framerate));
     }
 
     // DS HAL Callback Registration Functions - following exact pattern from dsVideoDevice.c

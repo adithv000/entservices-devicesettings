@@ -150,10 +150,14 @@ private:
     
     std::queue<DSMgr_Power_Event_State_t> _pwrEventQueue;
     pthread_t _pwrEventHandlerThreadID;
+    pthread_t _pwrConnectThreadID;
     pthread_mutex_t _pwrEventMutexLock;
     pthread_cond_t _pwrEventMutexCond;
     pthread_mutex_t _pwrEventQueueMutexLock;
     std::atomic<bool> _stopThread;
+    bool _initialized;
+    bool _pwrEventHandlerThreadStarted;
+    bool _pwrConnectThreadStarted;
     bool _registeredPowerEventHandler;
     
     PowerState _curState;

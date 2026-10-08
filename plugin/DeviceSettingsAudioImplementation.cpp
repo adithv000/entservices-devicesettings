@@ -30,9 +30,9 @@ namespace WPEFramework {
 namespace Plugin {
 
     DeviceSettingsAudioImpl::DeviceSettingsAudioImpl()
-        : _audio(Audio::Create(*this))
-        , _configLock()
+        : _configLock()
         , _callbackLock()
+        , _audio(Audio::Create(*this))
     {
         DSLOG_INFO("Constructor - Instance Address: %p", this);
     }
