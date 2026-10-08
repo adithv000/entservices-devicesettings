@@ -139,7 +139,8 @@ TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_FPDSetBrightness)
 
 TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_FPDGetBrightness)
 {
-    EXPECT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_EQ(Core::ERROR_NONE, CreateDeviceSettingsInterfaceObject());
+    ASSERT_NE(nullptr, m_deviceSettingsPlugin);
     Exchange::IDeviceSettingsFPD* fpd = m_deviceSettingsPlugin->QueryInterface<Exchange::IDeviceSettingsFPD>();
     ASSERT_NE(nullptr, fpd);
 
@@ -1114,7 +1115,13 @@ TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_AudioBassSurroundAndVolumeLevell
     leveller.level = 5;
     EXPECT_EQ(Core::ERROR_NONE, audio->SetAudioVolumeLeveller(handle, leveller));
 
-    EXPECT_CALL(*p_dsAudioHalMock, dsGetVolumeLeveller(handle, ::testing::_)).Times(1).WillOnce(::testing::Return(dsERR_NONE));
+    EXPECT_CALL(*p_dsAudioHalMock, dsGetVolumeLeveller(handle, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke([](intptr_t, dsVolumeLeveller_t* leveller) {
+            leveller->mode = 1;
+            leveller->level = 5;
+            return dsERR_NONE;
+        }));
     Exchange::IDeviceSettingsAudio::VolumeLeveller gotLeveller{};
     EXPECT_EQ(Core::ERROR_NONE, audio->GetAudioVolumeLeveller(handle, gotLeveller));
 
@@ -1721,6 +1728,8 @@ TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_HdmiInAllmAndLatencyAndVRR)
         }));
     uint32_t videoLatency = 0, audioLatency = 0;
     EXPECT_EQ(Core::ERROR_NONE, hdmiIn->GetHDMIInAVLatency(videoLatency, audioLatency));
+    EXPECT_EQ(20u, videoLatency);
+    EXPECT_EQ(10u, audioLatency);
 
     EXPECT_CALL(*p_dsHdmiInHalMock, dsSetEdid2AllmSupport(::testing::_, true)).Times(1).WillOnce(::testing::Return(dsERR_NONE));
     EXPECT_EQ(Core::ERROR_NONE,
