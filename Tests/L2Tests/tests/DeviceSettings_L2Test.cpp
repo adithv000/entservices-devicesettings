@@ -1280,13 +1280,6 @@ TEST_F(DeviceSettings_L2Test, DeviceSettings_L2_VideoPortConnectionAndActiveStat
     EXPECT_EQ(Core::ERROR_NONE, videoPort->GetVideoPortDisplaySurroundMode(handle, surroundMode));
     EXPECT_EQ(Exchange::IDeviceSettingsVideoPort::DS_VIDEO_PORT_SURROUNDMODE_DD, surroundMode);
 
-    EXPECT_CALL(*p_dsVideoPortHalMock, dsGetIgnoreEDIDStatus(handle, ::testing::_))
-        .Times(1)
-        .WillOnce(::testing::Invoke([](intptr_t, bool* status) { *status = false; return dsERR_NONE; }));
-    bool ignoreEdid = true;
-    EXPECT_EQ(Core::ERROR_NONE, videoPort->getIgnoreEDIDStatus(handle, ignoreEdid));
-    EXPECT_FALSE(ignoreEdid);
-
     videoPort->Release();
 }
 

@@ -215,7 +215,6 @@ jobs:
           ccec/drivers/CecIARMBusMgr.h
           rdk/ds/audioOutputPort.hpp
           rdk/ds/compositeIn.hpp
-          rdk/ds/dsDisplay.h
           rdk/ds/dsError.h
           rdk/ds/dsMgr.h
           rdk/ds/dsTypes.h
@@ -689,7 +688,6 @@ jobs:
           ccec/drivers/CecIARMBusMgr.h
           rdk/ds/audioOutputPort.hpp
           rdk/ds/compositeIn.hpp
-          rdk/ds/dsDisplay.h
           rdk/ds/dsError.h
           rdk/ds/dsMgr.h
           rdk/ds/dsTypes.h
