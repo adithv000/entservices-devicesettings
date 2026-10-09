@@ -2,6 +2,10 @@
 
 #include "dCompositeIn.h"
 
+#ifdef LOG_PRI
+#undef LOG_PRI
+#endif
+
 #include <com/rdk/hal/compositeinput/BnCompositeInputControllerListener.h>
 #include <com/rdk/hal/compositeinput/BnCompositeInputEventListener.h>
 #include <com/rdk/hal/compositeinput/ICompositeInputManager.h>

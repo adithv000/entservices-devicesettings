@@ -20,6 +20,10 @@
 
 #include "dVideoPort.h"
 
+#ifdef LOG_PRI
+#undef LOG_PRI
+#endif
+
 #include <com/rdk/hal/hdmioutput/BnHDMIOutputControllerListener.h>
 #include <com/rdk/hal/hdmioutput/BnHDMIOutputEventListener.h>
 #include <com/rdk/hal/hdmioutput/IHDMIOutput.h>
