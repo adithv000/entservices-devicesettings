@@ -36,8 +36,8 @@ WPEFramework::Exchange::IDeviceSettingsCompositeIn::DisplayVideoPortResolution C
     output.name = name.str();
     output.interlaced = resolution.interlaced;
     output.aspectRatio = (resolution.pixelWidth * 3 == resolution.pixelHeight * 4)
-        ? DisplayVideoAspectRatio::DS_DISPLAY_ASPECT_RATIO_4X3
-        : DisplayVideoAspectRatio::DS_DISPLAY_ASPECT_RATIO_16X9;
+        ? decltype(output.aspectRatio)::DS_DISPLAY_ASPECT_RATIO_4X3
+        : decltype(output.aspectRatio)::DS_DISPLAY_ASPECT_RATIO_16X9;
 
     if (resolution.pixelWidth == 720 && resolution.pixelHeight == 480) {
         output.pixelResolution = static_cast<decltype(output.pixelResolution)>(dsVIDEO_PIXELRES_720x480);
