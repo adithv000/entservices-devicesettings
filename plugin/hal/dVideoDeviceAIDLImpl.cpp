@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 #include "dVideoDeviceAIDLImpl.h"
+#include "DeviceSettingsTypes.h"
 
 #include <binder/IServiceManager.h>
 #include <binder/ProcessState.h>
@@ -238,6 +239,7 @@ void dVideoDeviceAIDLImpl::InitialiseHAL()
         _manager.clear();
         return;
     }
+    getPersistenceValue();
     _opened = true;
 }
 
@@ -260,7 +262,23 @@ void dVideoDeviceAIDLImpl::setAllCallbacks(const CallbackBundle& bundle)
 
 void dVideoDeviceAIDLImpl::getPersistenceValue()
 {
-    // Persistence is owned by the AIDL HAL implementation itself.
+    // Keys are shared by all devices, as in the legacy implementation.
+    VideoDeviceZoom zoom = VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_FULL;
+    bool forceDisableHDR = false;
+    try {
+        auto& persistence = device::HostPersistence::getInstance();
+        if (persistence.getProperty("VideoDevice.DFC", "Full") == "None") {
+            zoom = VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_NONE;
+        }
+        forceDisableHDR = persistence.getProperty("VideoDevice.forceHDRDisabled", "false") != "false";
+    } catch (...) {
+        DSLOG_INFO("Exception while reading VideoDevice persistence");
+    }
+
+    for (auto& device : _devices) {
+        device.cachedZoom = zoom;
+        device.forceDisableHDR = forceDisableHDR;
+    }
 }
 
 uint32_t dVideoDeviceAIDLImpl::GetVideoDeviceHandle(const int32_t index, int32_t& handle)
@@ -280,6 +298,12 @@ uint32_t dVideoDeviceAIDLImpl::SetVideoDeviceDFC(const int32_t handle, const Vid
     }
     DSLOG_WARN("Zoom/DFC (ASPECT_RATIO) is a PlaneControl AIDL property, not exposed by IHDMIOutput; caching value only");
     device->cachedZoom = zoomSetting;
+    try {
+        device::HostPersistence::getInstance().persistHostProperty("VideoDevice.DFC",
+            zoomSetting == VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_NONE ? "None" : "Full");
+    } catch (...) {
+        DSLOG_ERR("Failed to persist VideoDevice.DFC");
+    }
     if (_callbacks.OnZoomSettingsChanged) {
         _callbacks.OnZoomSettingsChanged(zoomSetting);
     }
@@ -352,6 +376,11 @@ uint32_t dVideoDeviceAIDLImpl::DisableHDR(const int32_t handle, const bool disab
         value.value = PropertyValue::Value::make<PropertyValue::Value::intValue>(static_cast<int32_t>(HdmiOutput::HDROutputMode::AUTO));
         bool applied = false;
         device->controller->setProperty(HdmiOutput::Property::HDR_OUTPUT_MODE, value, &applied);
+    }
+    try {
+        device::HostPersistence::getInstance().persistHostProperty("VideoDevice.forceHDRDisabled", disable ? "true" : "false");
+    } catch (...) {
+        DSLOG_ERR("Failed to persist VideoDevice.forceHDRDisabled");
     }
     return WPEFramework::Core::ERROR_NONE;
 }
