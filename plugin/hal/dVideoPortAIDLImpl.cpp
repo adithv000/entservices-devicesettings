@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 #include "dVideoPortAIDLImpl.h"
+#include "DeviceSettingsTypes.h"
 
 #include <binder/IServiceManager.h>
 #include <binder/ProcessState.h>
@@ -260,6 +261,7 @@ void dVideoPortAIDLImpl::InitialiseHAL()
         _manager.clear();
         return;
     }
+    getPersistenceValue();
     _opened = true;
 }
 
@@ -282,7 +284,17 @@ void dVideoPortAIDLImpl::setAllCallbacks(const CallbackBundle& bundle)
 
 void dVideoPortAIDLImpl::getPersistenceValue()
 {
-    // Persistence (resolution/color depth caching) is owned by the AIDL HAL implementation itself.
+    // Same defaults as legacy: TV profile 2160p, otherwise 1080p.
+    _persistedResolution = (profileType == TV) ? "2160p" : "1080p";
+    _force4KDisabled = false;
+    try {
+        auto& persistence = device::HostPersistence::getInstance();
+        _persistedResolution = persistence.getProperty("HDMI0.resolution", _persistedResolution);
+        DSLOG_INFO("Persistent HDMI resolution read: %s", _persistedResolution.c_str());
+        _force4KDisabled = (persistence.getProperty("VideoDevice.force4KDisabled", "false") == "true");
+    } catch (...) {
+        DSLOG_ERR("Error reading persistence values for VideoPort");
+    }
 }
 
 uint32_t dVideoPortAIDLImpl::GetVideoPort(const VideoPortType videoPort, const int32_t index, int32_t& handle)
@@ -371,6 +383,19 @@ uint32_t dVideoPortAIDLImpl::GetVideoPortResolution(const int32_t handle, VideoP
     if (device == nullptr) {
         return WPEFramework::Core::ERROR_UNAVAILABLE;
     }
+    // Legacy parity: report the persisted resolution while no display is connected.
+    bool connected = true;
+    if (device->controller->getHotPlugDetectState(&connected).isOk() && !connected) {
+        std::string persisted;
+        {
+            std::lock_guard<std::mutex> lock(_adminLock);
+            persisted = _persistedResolution;
+        }
+        HdmiOutput::VIC persistedVic;
+        if (ResolutionNameToVic(persisted, persistedVic) && VicToResolution(persistedVic, resolution)) {
+            return WPEFramework::Core::ERROR_NONE;
+        }
+    }
     std::optional<PropertyValue> value;
     if (!device->output->getProperty(HdmiOutput::Property::VIC, &value).isOk()) {
         return WPEFramework::Core::ERROR_GENERAL;
@@ -401,14 +426,27 @@ uint32_t dVideoPortAIDLImpl::SetVideoPortResolution(const int32_t handle, const 
         return WPEFramework::Core::ERROR_GENERAL;
     }
 
+    if (_force4KDisabled && resolution.name.find("2160") != std::string::npos) {
+        DSLOG_INFO("Cannot set 4K resolution while force-disable-4K is enabled");
+        return WPEFramework::Core::ERROR_GENERAL;
+    }
+
     PropertyValue value;
     value.value = PropertyValue::Value::make<PropertyValue::Value::intValue>(static_cast<int32_t>(vic));
     bool applied = false;
     if (!device->controller->setProperty(HdmiOutput::Property::VIC, value, &applied).isOk() || !applied) {
         return WPEFramework::Core::ERROR_GENERAL;
     }
-    // persist/forceCompatibility mirror the legacy DS HAL semantics; AIDL HAL owns persistence itself.
-    (void)persist;
+    if (persist) {
+        try {
+            device::HostPersistence::getInstance().persistHostProperty("HDMI0.resolution", resolution.name);
+            std::lock_guard<std::mutex> lock(_adminLock);
+            _persistedResolution = resolution.name;
+        } catch (...) {
+            DSLOG_ERR("Failed to persist HDMI resolution");
+        }
+    }
+    // No analog ports behind the AIDL HAL, so there is no cross-port compatibility to enforce.
     (void)forceCompatibility;
     return WPEFramework::Core::ERROR_NONE;
 }
@@ -648,17 +686,27 @@ uint32_t dVideoPortAIDLImpl::GetTVSupportedResolutions(const int32_t handle, int
 
 uint32_t dVideoPortAIDLImpl::SetForceDisable4K(const int32_t handle, const bool disable)
 {
-    (void)handle;
-    (void)disable;
-    DSLOG_WARN("force-disable-4K is not implemented by the AIDL HDMI Output HAL");
-    return WPEFramework::Core::ERROR_UNAVAILABLE;
+    if (FindDevice(handle) == nullptr) {
+        return WPEFramework::Core::ERROR_UNAVAILABLE;
+    }
+    // The AIDL HAL has no 4K switch; the flag is enforced in SetVideoPortResolution and persisted.
+    _force4KDisabled = disable;
+    try {
+        device::HostPersistence::getInstance().persistHostProperty("VideoDevice.force4KDisabled", disable ? "true" : "false");
+    } catch (...) {
+        DSLOG_ERR("Failed to persist force4KDisabled");
+    }
+    return WPEFramework::Core::ERROR_NONE;
 }
 
 uint32_t dVideoPortAIDLImpl::GetForceDisable4K(const int32_t handle, bool& disabled)
 {
-    (void)handle;
     disabled = false;
-    return WPEFramework::Core::ERROR_UNAVAILABLE;
+    if (FindDevice(handle) == nullptr) {
+        return WPEFramework::Core::ERROR_UNAVAILABLE;
+    }
+    disabled = _force4KDisabled;
+    return WPEFramework::Core::ERROR_NONE;
 }
 
 HDRStandard dVideoPortAIDLImpl::ConvertHdrOutputMode(HdmiOutput::HDROutputMode mode)
@@ -830,18 +878,36 @@ uint32_t dVideoPortAIDLImpl::GetColorDepthCapabilities(const int32_t handle, uin
 uint32_t dVideoPortAIDLImpl::GetPreferredColorDepth(const int32_t handle, DisplayColorDepth& colorDepth, const bool persist)
 {
     (void)handle;
-    (void)persist;
     colorDepth = DisplayColorDepth::DS_DISPLAY_COLORDEPTH_UNKNOWN;
-    return WPEFramework::Core::ERROR_UNAVAILABLE;
+    if (!persist) {
+        return WPEFramework::Core::ERROR_UNAVAILABLE;
+    }
+    colorDepth = DisplayColorDepth::DS_DISPLAY_COLORDEPTH_AUTO;
+    try {
+        const std::string stored = device::HostPersistence::getInstance().getProperty("HDMI0.colorDepth",
+            std::to_string(static_cast<int>(colorDepth)));
+        colorDepth = static_cast<DisplayColorDepth>(std::stoi(stored));
+    } catch (...) {
+        DSLOG_ERR("Reading HDMI persistent color depth failed, using default");
+    }
+    return WPEFramework::Core::ERROR_NONE;
 }
 
 uint32_t dVideoPortAIDLImpl::SetPreferredColorDepth(const int32_t handle, const DisplayColorDepth colorDepth, const bool persist)
 {
     (void)handle;
-    (void)colorDepth;
-    (void)persist;
-    DSLOG_WARN("preferred color depth is not exposed by the AIDL HDMI Output HAL");
-    return WPEFramework::Core::ERROR_UNAVAILABLE;
+    // The AIDL HAL cannot apply a color depth; only the persisted preference is stored.
+    if (!persist) {
+        DSLOG_WARN("preferred color depth is not exposed by the AIDL HDMI Output HAL");
+        return WPEFramework::Core::ERROR_UNAVAILABLE;
+    }
+    try {
+        device::HostPersistence::getInstance().persistHostProperty("HDMI0.colorDepth", std::to_string(static_cast<int>(colorDepth)));
+    } catch (...) {
+        DSLOG_ERR("Failed to persist color depth setting");
+        return WPEFramework::Core::ERROR_GENERAL;
+    }
+    return WPEFramework::Core::ERROR_NONE;
 }
 
 void dVideoPortAIDLImpl::OnHotPlugDetectStateChanged(const int32_t handle, bool connected)
