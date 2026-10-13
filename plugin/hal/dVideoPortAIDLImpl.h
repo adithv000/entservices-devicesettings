@@ -44,8 +44,6 @@ public:
     dVideoPortAIDLImpl(const dVideoPortAIDLImpl&) = delete;
     dVideoPortAIDLImpl& operator=(const dVideoPortAIDLImpl&) = delete;
 
-    static bool IsAvailable();
-
     void InitialiseHAL() override;
     void DeInitialiseHAL() override;
     void setAllCallbacks(const CallbackBundle& bundle) override;

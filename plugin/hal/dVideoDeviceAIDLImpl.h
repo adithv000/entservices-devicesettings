@@ -47,8 +47,6 @@ public:
     dVideoDeviceAIDLImpl(const dVideoDeviceAIDLImpl&) = delete;
     dVideoDeviceAIDLImpl& operator=(const dVideoDeviceAIDLImpl&) = delete;
 
-    static bool IsAvailable();
-
     void InitialiseHAL() override;
     void DeInitialiseHAL() override;
     void setAllCallbacks(const CallbackBundle& bundle) override;

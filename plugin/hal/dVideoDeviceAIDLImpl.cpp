@@ -140,11 +140,6 @@ android::sp<dVideoDeviceAIDLImpl::Manager> dVideoDeviceAIDLImpl::GetManager()
     return GetService<Manager>();
 }
 
-bool dVideoDeviceAIDLImpl::IsAvailable()
-{
-    return GetManager() != nullptr;
-}
-
 bool dVideoDeviceAIDLImpl::OpenDevice(const Output::Id& id, Device& device)
 {
     device.id = id;

@@ -160,11 +160,6 @@ android::sp<dVideoPortAIDLImpl::Manager> dVideoPortAIDLImpl::GetManager()
     return GetService<Manager>();
 }
 
-bool dVideoPortAIDLImpl::IsAvailable()
-{
-    return GetManager() != nullptr;
-}
-
 bool dVideoPortAIDLImpl::OpenDevice(const Output::Id& id, Device& device)
 {
     device.id = id;

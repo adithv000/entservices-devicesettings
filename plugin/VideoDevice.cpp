@@ -27,20 +27,17 @@
 
 #include "secure_wrapper.h"
 #include "VideoDevice.h"
+#include "hal/HalFactoryUtility.h"
 #include "hal/dVideoDeviceImpl.h"
-#ifdef ENABLE_HDMIOUTPUT_AIDL
 #include "hal/dVideoDeviceAIDLImpl.h"
-#endif
 
 VideoDevice VideoDevice::Create(INotification& parent)
 {
     ENTRY_LOG;
-#ifdef ENABLE_HDMIOUTPUT_AIDL
-    if (dVideoDeviceAIDLImpl::IsAvailable()) {
+    if (HalFactoryUtility::isAidlServiceAvailable(android::String16(IHdmiOutput::serviceName().c_str()))) {
         DSLOG_INFO("Using HDMI Output AIDL HAL");
         return VideoDevice(parent, std::make_shared<dVideoDeviceAIDLImpl>());
     }
-#endif
     DSLOG_INFO("Using legacy VideoDevice DS HAL");
     return VideoDevice(parent, std::make_shared<DefaultImpl>());
 }
