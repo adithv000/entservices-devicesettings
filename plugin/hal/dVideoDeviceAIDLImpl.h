@@ -32,6 +32,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <vector>
 
 // Implements the VideoDevice HAL Platform interface (see dVideoDevice.h) on top of the
 // com.rdk.hal.hdmioutput AIDL HAL. Per hdmiout_mapping.csv most dsVideoDevice.c APIs are
@@ -73,23 +74,27 @@ private:
     using Output = com::rdk::hal::hdmioutput::IHDMIOutput;
     using Controller = com::rdk::hal::hdmioutput::IHDMIOutputController;
 
+    // Handle exposed to callers is the HDMI output Id value.
+    struct Device {
+        Output::Id id;
+        android::sp<Output> output;
+        android::sp<Controller> controller;
+        android::sp<ControllerListener> controllerListener;
+        android::sp<EventListener> eventListener;
+        VideoDeviceZoom cachedZoom = VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_FULL;
+        bool forceDisableHDR = true;
+    };
+
     static android::sp<Manager> GetManager();
-    bool ResolveDefaultOutput();
-    bool IsSupportedHandle(const int32_t handle) const { return _opened && handle == kDefaultHandle; }
+    bool OpenDevice(const Output::Id& id, Device& device);
+    static void CloseDevice(Device& device);
+    Device* FindDevice(const int32_t handle);
 
-    void OnFrameRateChanged();
-
-    static constexpr int32_t kDefaultHandle = 0;
+    void OnFrameRateChanged(const int32_t handle);
 
     std::mutex _adminLock;
     CallbackBundle _callbacks;
     android::sp<Manager> _manager;
-    Output::Id _outputId;
-    android::sp<Output> _output;
-    android::sp<Controller> _controller;
-    android::sp<ControllerListener> _controllerListener;
-    android::sp<EventListener> _eventListener;
+    std::vector<Device> _devices;
     bool _opened;
-    VideoDeviceZoom _cachedZoom;
-    bool _forceDisableHDR;
 };

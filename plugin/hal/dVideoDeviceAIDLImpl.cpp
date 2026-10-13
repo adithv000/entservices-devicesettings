@@ -100,19 +100,21 @@ public:
     android::binder::Status onHotPlugDetectStateChanged(bool) override { return android::binder::Status::ok(); }
     android::binder::Status onFrameRateChanged() override
     {
-        _parent.OnFrameRateChanged();
+        _parent.OnFrameRateChanged(_handle);
         return android::binder::Status::ok();
     }
     android::binder::Status onHDCPStatusChanged(HdmiOutput::HDCPStatus, HdmiOutput::HDCPProtocolVersion) override { return android::binder::Status::ok(); }
     android::binder::Status onEDID(const std::vector<uint8_t>&) override { return android::binder::Status::ok(); }
 
-    explicit ControllerListener(dVideoDeviceAIDLImpl& parent)
+    ControllerListener(dVideoDeviceAIDLImpl& parent, const int32_t handle)
         : _parent(parent)
+        , _handle(handle)
     {
     }
 
 private:
     dVideoDeviceAIDLImpl& _parent;
+    const int32_t _handle;
 };
 
 class dVideoDeviceAIDLImpl::EventListener : public HdmiOutput::BnHDMIOutputEventListener {
@@ -123,8 +125,6 @@ public:
 
 dVideoDeviceAIDLImpl::dVideoDeviceAIDLImpl()
     : _opened(false)
-    , _cachedZoom(VideoDeviceZoom::DS_VIDEO_DEVICE_ZOOM_FULL)
-    , _forceDisableHDR(true)
 {
     InitialiseHAL();
 }
@@ -144,22 +144,64 @@ bool dVideoDeviceAIDLImpl::IsAvailable()
     return GetManager() != nullptr;
 }
 
-bool dVideoDeviceAIDLImpl::ResolveDefaultOutput()
+bool dVideoDeviceAIDLImpl::OpenDevice(const Output::Id& id, Device& device)
 {
-    if (_manager == nullptr) {
+    device.id = id;
+    if (!_manager->getHDMIOutput(id, &device.output).isOk() || device.output == nullptr) {
+        DSLOG_ERR("getHDMIOutput failed for id=%d", id.value);
         return false;
     }
-    std::vector<Output::Id> ids;
-    if (!_manager->getHDMIOutputIds(&ids).isOk() || ids.empty()) {
-        DSLOG_ERR("getHDMIOutputIds failed or returned no HDMI outputs");
+
+    device.controllerListener = new ControllerListener(*this, id.value);
+    device.eventListener = new EventListener(*this);
+    bool registered = false;
+    device.output->registerEventListener(device.eventListener, &registered);
+
+    if (!device.output->open(device.controllerListener, &device.controller).isOk() || device.controller == nullptr) {
+        DSLOG_ERR("open() failed on HDMI output id=%d", id.value);
+        CloseDevice(device);
         return false;
     }
-    _outputId = ids.front();
-    if (!_manager->getHDMIOutput(_outputId, &_output).isOk() || _output == nullptr) {
-        DSLOG_ERR("getHDMIOutput failed for id=%d", _outputId.value);
+    if (!device.controller->start().isOk()) {
+        DSLOG_ERR("HDMIOutputController::start() failed for id=%d", id.value);
+        CloseDevice(device);
         return false;
     }
     return true;
+}
+
+void dVideoDeviceAIDLImpl::CloseDevice(Device& device)
+{
+    if (device.controller != nullptr) {
+        device.controller->stop();
+    }
+    if (device.output != nullptr) {
+        if (device.controller != nullptr) {
+            bool closed = false;
+            device.output->close(device.controller, &closed);
+        }
+        if (device.eventListener != nullptr) {
+            bool unregistered = false;
+            device.output->unregisterEventListener(device.eventListener, &unregistered);
+        }
+    }
+    device.controller.clear();
+    device.controllerListener.clear();
+    device.eventListener.clear();
+    device.output.clear();
+}
+
+dVideoDeviceAIDLImpl::Device* dVideoDeviceAIDLImpl::FindDevice(const int32_t handle)
+{
+    if (!_opened) {
+        return nullptr;
+    }
+    for (auto& device : _devices) {
+        if (device.id.value == handle) {
+            return &device;
+        }
+    }
+    return nullptr;
 }
 
 void dVideoDeviceAIDLImpl::InitialiseHAL()
@@ -176,51 +218,38 @@ void dVideoDeviceAIDLImpl::InitialiseHAL()
     }
     android::ProcessState::self()->startThreadPool();
 
-    if (!ResolveDefaultOutput()) {
+    std::vector<Output::Id> ids;
+    if (!_manager->getHDMIOutputIds(&ids).isOk() || ids.empty()) {
+        DSLOG_ERR("getHDMIOutputIds failed or returned no HDMI outputs");
         _manager.clear();
         return;
     }
 
-    _controllerListener = new ControllerListener(*this);
-    _eventListener = new EventListener(*this);
-    bool registered = false;
-    _output->registerEventListener(_eventListener, &registered);
-
-    if (!_output->open(_controllerListener, &_controller).isOk() || _controller == nullptr) {
-        DSLOG_ERR("open() failed on default HDMI output");
-        return;
-    }
-    if (!_controller->start().isOk()) {
-        DSLOG_ERR("HDMIOutputController::start() failed");
-        return;
+    _devices.reserve(ids.size());
+    for (const auto& id : ids) {
+        Device device;
+        if (OpenDevice(id, device)) {
+            _devices.push_back(std::move(device));
+            DSLOG_INFO("HDMI Output AIDL HAL initialized for VideoDevice (outputId=%d)", id.value);
+        }
     }
 
+    if (_devices.empty()) {
+        _manager.clear();
+        return;
+    }
     _opened = true;
-    DSLOG_INFO("HDMI Output AIDL HAL initialized for VideoDevice (outputId=%d)", _outputId.value);
 }
 
 void dVideoDeviceAIDLImpl::DeInitialiseHAL()
 {
     std::lock_guard<std::mutex> lock(_adminLock);
-    if (_controller != nullptr) {
-        _controller->stop();
-    }
-    if (_output != nullptr) {
-        if (_controller != nullptr) {
-            bool closed = false;
-            _output->close(_controller, &closed);
-        }
-        if (_eventListener != nullptr) {
-            bool unregistered = false;
-            _output->unregisterEventListener(_eventListener, &unregistered);
-        }
-    }
-    _controller.clear();
-    _controllerListener.clear();
-    _eventListener.clear();
-    _output.clear();
-    _manager.clear();
     _opened = false;
+    for (auto& device : _devices) {
+        CloseDevice(device);
+    }
+    _devices.clear();
+    _manager.clear();
 }
 
 void dVideoDeviceAIDLImpl::setAllCallbacks(const CallbackBundle& bundle)
@@ -236,20 +265,21 @@ void dVideoDeviceAIDLImpl::getPersistenceValue()
 
 uint32_t dVideoDeviceAIDLImpl::GetVideoDeviceHandle(const int32_t index, int32_t& handle)
 {
-    if (!_opened || index != 0) {
+    if (!_opened || index < 0 || static_cast<size_t>(index) >= _devices.size()) {
         return WPEFramework::Core::ERROR_UNAVAILABLE;
     }
-    handle = kDefaultHandle;
+    handle = _devices[index].id.value;
     return WPEFramework::Core::ERROR_NONE;
 }
 
 uint32_t dVideoDeviceAIDLImpl::SetVideoDeviceDFC(const int32_t handle, const VideoDeviceZoom zoomSetting)
 {
-    if (!IsSupportedHandle(handle)) {
+    Device* device = FindDevice(handle);
+    if (device == nullptr) {
         return WPEFramework::Core::ERROR_UNAVAILABLE;
     }
     DSLOG_WARN("Zoom/DFC (ASPECT_RATIO) is a PlaneControl AIDL property, not exposed by IHDMIOutput; caching value only");
-    _cachedZoom = zoomSetting;
+    device->cachedZoom = zoomSetting;
     if (_callbacks.OnZoomSettingsChanged) {
         _callbacks.OnZoomSettingsChanged(zoomSetting);
     }
@@ -258,26 +288,28 @@ uint32_t dVideoDeviceAIDLImpl::SetVideoDeviceDFC(const int32_t handle, const Vid
 
 uint32_t dVideoDeviceAIDLImpl::GetVideoDeviceDFC(const int32_t handle, VideoDeviceZoom& zoomSetting)
 {
-    if (!IsSupportedHandle(handle)) {
+    const Device* device = FindDevice(handle);
+    if (device == nullptr) {
         return WPEFramework::Core::ERROR_UNAVAILABLE;
     }
-    zoomSetting = _cachedZoom;
+    zoomSetting = device->cachedZoom;
     return WPEFramework::Core::ERROR_NONE;
 }
 
 uint32_t dVideoDeviceAIDLImpl::GetHDRCapabilities(const int32_t handle, int32_t& capabilities)
 {
-    if (!IsSupportedHandle(handle)) {
+    const Device* device = FindDevice(handle);
+    if (device == nullptr) {
         capabilities = 0x0; // dsHDRSTANDARD_NONE
         return WPEFramework::Core::ERROR_NONE;
     }
     HdmiOutput::Capabilities caps;
-    if (!_output->getCapabilities(&caps).isOk()) {
+    if (!device->output->getCapabilities(&caps).isOk()) {
         capabilities = 0x0;
         return WPEFramework::Core::ERROR_NONE;
     }
     int32_t bitmask = 0x0;
-    if (!_forceDisableHDR) {
+    if (!device->forceDisableHDR) {
         for (const auto& mode : caps.supportedHDROutputModes) {
             switch (mode) {
             case HdmiOutput::HDROutputMode::HLG:          bitmask |= 0x02; break;
@@ -310,12 +342,16 @@ uint32_t dVideoDeviceAIDLImpl::GetCodecInfo(const int32_t handle, const VideoDev
 
 uint32_t dVideoDeviceAIDLImpl::DisableHDR(const int32_t handle, const bool disable)
 {
-    _forceDisableHDR = disable;
-    if (IsSupportedHandle(handle) && disable) {
+    Device* device = FindDevice(handle);
+    if (device == nullptr) {
+        return WPEFramework::Core::ERROR_NONE;
+    }
+    device->forceDisableHDR = disable;
+    if (disable) {
         PropertyValue value;
         value.value = PropertyValue::Value::make<PropertyValue::Value::intValue>(static_cast<int32_t>(HdmiOutput::HDROutputMode::AUTO));
         bool applied = false;
-        _controller->setProperty(HdmiOutput::Property::HDR_OUTPUT_MODE, value, &applied);
+        device->controller->setProperty(HdmiOutput::Property::HDR_OUTPUT_MODE, value, &applied);
     }
     return WPEFramework::Core::ERROR_NONE;
 }
@@ -337,11 +373,12 @@ uint32_t dVideoDeviceAIDLImpl::GetFRFMode(const int32_t handle, int32_t& frfmode
 
 uint32_t dVideoDeviceAIDLImpl::GetCurrentDisplayFrameRate(const int32_t handle, string& framerate)
 {
-    if (!IsSupportedHandle(handle)) {
+    const Device* device = FindDevice(handle);
+    if (device == nullptr) {
         return WPEFramework::Core::ERROR_UNAVAILABLE;
     }
     std::optional<PropertyValue> value;
-    if (!_output->getProperty(HdmiOutput::Property::VIC, &value).isOk()) {
+    if (!device->output->getProperty(HdmiOutput::Property::VIC, &value).isOk()) {
         return WPEFramework::Core::ERROR_GENERAL;
     }
     const auto vic = static_cast<HdmiOutput::VIC>(ExtractIntProperty(value, 0));
@@ -352,7 +389,8 @@ uint32_t dVideoDeviceAIDLImpl::GetCurrentDisplayFrameRate(const int32_t handle, 
 
 uint32_t dVideoDeviceAIDLImpl::SetDisplayFrameRate(const int32_t handle, const string framerate)
 {
-    if (!IsSupportedHandle(handle)) {
+    Device* device = FindDevice(handle);
+    if (device == nullptr) {
         return WPEFramework::Core::ERROR_UNAVAILABLE;
     }
     if (framerate.empty()) {
@@ -365,7 +403,7 @@ uint32_t dVideoDeviceAIDLImpl::SetDisplayFrameRate(const int32_t handle, const s
     }
 
     std::optional<PropertyValue> value;
-    if (!_output->getProperty(HdmiOutput::Property::VIC, &value).isOk()) {
+    if (!device->output->getProperty(HdmiOutput::Property::VIC, &value).isOk()) {
         return WPEFramework::Core::ERROR_GENERAL;
     }
     const auto currentVic = static_cast<HdmiOutput::VIC>(ExtractIntProperty(value, 0));
@@ -382,7 +420,7 @@ uint32_t dVideoDeviceAIDLImpl::SetDisplayFrameRate(const int32_t handle, const s
     PropertyValue vicValue;
     vicValue.value = PropertyValue::Value::make<PropertyValue::Value::intValue>(static_cast<int32_t>(target->vic));
     bool applied = false;
-    const uint32_t result = (_controller->setProperty(HdmiOutput::Property::VIC, vicValue, &applied).isOk() && applied)
+    const uint32_t result = (device->controller->setProperty(HdmiOutput::Property::VIC, vicValue, &applied).isOk() && applied)
         ? WPEFramework::Core::ERROR_NONE
         : WPEFramework::Core::ERROR_GENERAL;
 
@@ -392,10 +430,10 @@ uint32_t dVideoDeviceAIDLImpl::SetDisplayFrameRate(const int32_t handle, const s
     return result;
 }
 
-void dVideoDeviceAIDLImpl::OnFrameRateChanged()
+void dVideoDeviceAIDLImpl::OnFrameRateChanged(const int32_t handle)
 {
     string framerate;
-    if (GetCurrentDisplayFrameRate(kDefaultHandle, framerate) == WPEFramework::Core::ERROR_NONE
+    if (GetCurrentDisplayFrameRate(handle, framerate) == WPEFramework::Core::ERROR_NONE
         && _callbacks.OnDisplayFrameratePostChange) {
         _callbacks.OnDisplayFrameratePostChange(framerate);
     }
