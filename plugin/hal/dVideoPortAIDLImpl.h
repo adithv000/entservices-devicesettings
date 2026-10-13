@@ -32,6 +32,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <vector>
 
 // Implements the VideoPort HAL Platform interface (see dVideoPort.h) on top of the
 // com.rdk.hal.hdmioutput AIDL HAL. API mapping follows hdmiout_mapping.csv.
@@ -99,15 +100,24 @@ private:
     using Output = com::rdk::hal::hdmioutput::IHDMIOutput;
     using Controller = com::rdk::hal::hdmioutput::IHDMIOutputController;
 
-    static android::sp<Manager> GetManager();
-    bool ResolveDefaultOutput();
-    // Only the single default HDMI output (handle 0) is exposed by the AIDL HAL.
-    bool IsSupportedHandle(const int32_t handle) const { return _opened && handle == kDefaultHandle; }
+    // Handle exposed to callers is the HDMI output Id value.
+    struct Device {
+        Output::Id id;
+        android::sp<Output> output;
+        android::sp<Controller> controller;
+        android::sp<ControllerListener> controllerListener;
+        android::sp<EventListener> eventListener;
+    };
 
-    void OnHotPlugDetectStateChanged(bool connected);
-    void OnFrameRateChanged();
-    void OnHDCPStatusChanged(com::rdk::hal::hdmioutput::HDCPStatus status, com::rdk::hal::hdmioutput::HDCPProtocolVersion version);
-    void OnStateChanged(com::rdk::hal::hdmioutput::State oldState, com::rdk::hal::hdmioutput::State newState);
+    static android::sp<Manager> GetManager();
+    bool OpenDevice(const Output::Id& id, Device& device);
+    static void CloseDevice(Device& device);
+    Device* FindDevice(const int32_t handle);
+
+    void OnHotPlugDetectStateChanged(const int32_t handle, bool connected);
+    void OnFrameRateChanged(const int32_t handle);
+    void OnHDCPStatusChanged(const int32_t handle, com::rdk::hal::hdmioutput::HDCPStatus status, com::rdk::hal::hdmioutput::HDCPProtocolVersion version);
+    void OnStateChanged(const int32_t handle, com::rdk::hal::hdmioutput::State oldState, com::rdk::hal::hdmioutput::State newState);
 
     static bool ResolutionNameToVic(const std::string& name, com::rdk::hal::hdmioutput::VIC& vic);
     static bool VicToResolution(com::rdk::hal::hdmioutput::VIC vic, VideoPortResolution& resolution);
@@ -117,15 +127,9 @@ private:
     static HDRStandard ConvertHdrOutputMode(com::rdk::hal::hdmioutput::HDROutputMode mode);
     static com::rdk::hal::hdmioutput::HDROutputMode ConvertHdrStandard(const HDRStandard hdrStandard);
 
-    static constexpr int32_t kDefaultHandle = 0;
-
     std::mutex _adminLock;
     CallbackBundle _callbacks;
     android::sp<Manager> _manager;
-    Output::Id _outputId;
-    android::sp<Output> _output;
-    android::sp<Controller> _controller;
-    android::sp<ControllerListener> _controllerListener;
-    android::sp<EventListener> _eventListener;
+    std::vector<Device> _devices;
     bool _opened;
 };
