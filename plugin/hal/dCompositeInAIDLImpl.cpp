@@ -148,11 +148,6 @@ android::sp<dCompositeInAIDLImpl::PlaneControl> dCompositeInAIDLImpl::GetPlaneCo
     return GetService<PlaneControl>();
 }
 
-bool dCompositeInAIDLImpl::IsAvailable()
-{
-    return GetManager() != nullptr;
-}
-
 void dCompositeInAIDLImpl::InitialiseHAL()
 {
     std::lock_guard<std::mutex> lock(_adminLock);
