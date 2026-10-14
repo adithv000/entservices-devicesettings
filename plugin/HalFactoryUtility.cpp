@@ -26,25 +26,14 @@
 
 #include <linux/android/binder.h>
 #include <binder/IServiceManager.h>
-#include <com/rdk/hal/deepsleep/IDeepSleep.h>
-#include <com/rdk/hal/boot/IBoot.h>
 
 #include "Module.h"
 #include <core/Portability.h>
 
 #include "HalFactoryUtility.h"
 #include "ServiceManagerCheck.h"
-
 #include "UtilsLogging.h"
 
-#include "DeepSleepImpl.h"
-#include "PowerImpl.h"
-
-#include "DeepSleepAidlImpl.h"
-#include "PowerAidlImpl.h"
-
-using namespace com::rdk::hal::boot;
-using namespace com::rdk::hal::deepsleep;
 static const android::String16 mServiceManagerName("manager");
 
 namespace {

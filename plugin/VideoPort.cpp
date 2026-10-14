@@ -27,7 +27,7 @@
 
 #include "secure_wrapper.h"
 #include "VideoPort.h"
-#include "hal/HalFactoryUtility.h"
+#include "HalFactoryUtility.h"
 #include "hal/dVideoPortImpl.h"
 #include "hal/dVideoPortAIDLImpl.h"
 

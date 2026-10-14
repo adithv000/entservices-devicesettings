@@ -75,6 +75,10 @@ add_library(${PLUGIN_IMPLEMENTATION} SHARED
     DSController.cpp
     DSPwrEventListener.cpp
     DSProductTraitsHandler.cpp
+    HalFactoryUtility.cpp
+    hal/dCompositeInAIDLImpl.cpp
+    hal/dVideoDeviceAIDLImpl.cpp
+    hal/dVideoPortAIDLImpl.cpp
     )
 
 include_directories(

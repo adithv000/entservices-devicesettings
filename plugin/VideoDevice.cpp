@@ -27,7 +27,7 @@
 
 #include "secure_wrapper.h"
 #include "VideoDevice.h"
-#include "hal/HalFactoryUtility.h"
+#include "HalFactoryUtility.h"
 #include "hal/dVideoDeviceImpl.h"
 #include "hal/dVideoDeviceAIDLImpl.h"
 
