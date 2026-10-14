@@ -19,6 +19,7 @@
 #include "dVideoPortAIDLImpl.h"
 #include "DeviceSettingsTypes.h"
 #include "DeviceSettingsHdmiStatus.h"
+#include <dsDisplay.h>
 
 #include <binder/IServiceManager.h>
 #include <binder/ProcessState.h>

@@ -17,110 +17,30 @@
  * limitations under the License.
  */
 
-#include <algorithm>
-#include <cctype>
-#include <cstdlib>
-#include <memory>
 #include <string>
 #include <unordered_map>
 
-#include <linux/android/binder.h>
 #include <binder/IServiceManager.h>
-#include <utils/String8.h>
 
 #include "Module.h"
 #include <core/Portability.h>
 
 #include "HalFactoryUtility.h"
-#include "ServiceManagerCheck.h"
 #include "UtilsLogging.h"
-
-static const android::String16 mServiceManagerName("manager");
 
 std::unordered_map<std::string, HalFactoryUtility::BackendType> HalFactoryUtility::mBackendType;
 
 bool HalFactoryUtility::isAidlServiceAvailable(const android::String16 &expectedServiceName)
 {
-            LOGINFO("isAidlServiceAvailable invoked\r\n");
+    const std::string serviceName = android::String8(expectedServiceName).string();
+    auto backendTypeIt = mBackendType.find(serviceName);
+    if (backendTypeIt != mBackendType.end()) {
+        return backendTypeIt->second == BackendType::AIDL;
+    }
 
-            const std::string expectedServiceNameString = android::String8(expectedServiceName).string();
-            auto backendTypeIt = mBackendType.find(expectedServiceNameString);
-
-            if (backendTypeIt != mBackendType.end()) {
-                if (backendTypeIt->second == BackendType::AIDL) {
-                    return true;
-                } else if (backendTypeIt->second == BackendType::LEGACY) {
-                    return false;
-                }
-            } else {
-                backendTypeIt = mBackendType.emplace(expectedServiceNameString, BackendType::UNKNOWN).first;
-            }
-
-            if (!isServiceManagerAvailable()) {
-                LOGINFO("Binder driver not available; falling back to legacy HAL\r\n");
-                backendTypeIt->second = BackendType::LEGACY;
-                return false;
-            }
-
-            android::sp<android::IServiceManager> serviceManager = android::defaultServiceManager();
-            if (serviceManager == nullptr) {
-                LOGERR("isAidlServiceAvailable failed: IServiceManager unavailable\r\n");
-                backendTypeIt->second = BackendType::LEGACY;
-                return false;
-            }
-
-            LOGINFO("Successfully obtained IServiceManager\r\n");
-
-            android::Vector<android::String16> services = serviceManager->listServices();
-            size_t discoveredServiceCount = 0;
-            bool matched = false;
-
-            for (size_t index = 0; index < services.size(); ++index) {
-                if (services[index] != mServiceManagerName) {
-                    ++discoveredServiceCount;
-                }
-            }
-
-            LOGINFO("isAidlServiceAvailable discovered %zu binder services\r\n", discoveredServiceCount);
-            if (discoveredServiceCount == 0) {
-                LOGINFO(
-                    "isAidlServiceAvailable found no binder services beyond the ServiceManager entry while searching for '%s'\r\n",
-                    android::String8(expectedServiceName).string());
-                backendTypeIt->second = BackendType::LEGACY;
-                return false;
-            }
-
-            LOGINFO(
-                "isAidlServiceAvailable inspecting %zu registered binder services for '%s'\r\n",
-                discoveredServiceCount, android::String8(expectedServiceName).string());
-
-            for (size_t index = 0; index < services.size(); ++index) {
-                if (services[index] == mServiceManagerName) {
-                    continue;
-                }
-
-                const android::String8 discoveredServiceName(services[index]);
-                if (services[index] == expectedServiceName) {
-                    matched = true;
-                }
-
-                LOGINFO(
-                    "isAidlServiceAvailable discovered binder service[%zu]='%s'\r\n",
-                    index,
-                    discoveredServiceName.string());
-            }
-
-            if (matched) {
-                LOGINFO(
-                    "isAidlServiceAvailable found AIDL service '%s'\r\n",
-                    android::String8(expectedServiceName).string());
-                backendTypeIt->second = BackendType::AIDL;
-                return true;
-            }
-
-            LOGINFO(
-                "isAidlServiceAvailable did not find AIDL service '%s'\r\n",
-                android::String8(expectedServiceName).string());
-            backendTypeIt->second = BackendType::LEGACY;
-            return false;
+    backendTypeIt = mBackendType.emplace(serviceName, BackendType::UNKNOWN).first;
+    const android::sp<android::IServiceManager> serviceManager = android::defaultServiceManager();
+    const bool available = serviceManager != nullptr && serviceManager->checkService(expectedServiceName) != nullptr;
+    backendTypeIt->second = available ? BackendType::AIDL : BackendType::LEGACY;
+    return available;
 }

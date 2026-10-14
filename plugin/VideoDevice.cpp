@@ -30,11 +30,12 @@
 #include "HalFactoryUtility.h"
 #include "hal/dVideoDeviceImpl.h"
 #include "hal/dVideoDeviceAIDLImpl.h"
+#include <com/rdk/hal/hdmioutput/IHDMIOutputManager.h>
 
 VideoDevice VideoDevice::Create(INotification& parent)
 {
     ENTRY_LOG;
-    if (HalFactoryUtility::isAidlServiceAvailable(android::String16(IHdmiOutput::serviceName().c_str()))) {
+    if (HalFactoryUtility::isAidlServiceAvailable(android::String16(com::rdk::hal::hdmioutput::IHDMIOutputManager::serviceName().c_str()))) {
         DSLOG_INFO("Using HDMI Output AIDL HAL");
         return VideoDevice(parent, std::make_shared<dVideoDeviceAIDLImpl>());
     }

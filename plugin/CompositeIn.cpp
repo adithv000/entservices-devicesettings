@@ -30,11 +30,12 @@
 #include "HalFactoryUtility.h"
 #include "hal/dCompositeInImpl.h"
 #include "hal/dCompositeInAIDLImpl.h"
+#include <com/rdk/hal/compositeinput/ICompositeInputManager.h>
 
 CompositeIn CompositeIn::Create(INotification& parent)
 {
     ENTRY_LOG;
-    if (HalFactoryUtility::isAidlServiceAvailable(android::String16(ICompositeIn::serviceName().c_str()))) {
+    if (HalFactoryUtility::isAidlServiceAvailable(android::String16(com::rdk::hal::compositeinput::ICompositeInputManager::serviceName().c_str()))) {
         DSLOG_INFO("Using CompositeInput AIDL HAL");
         return CompositeIn(parent, std::make_shared<dCompositeInAIDLImpl>());
     }

@@ -30,11 +30,12 @@
 #include "HalFactoryUtility.h"
 #include "hal/dVideoPortImpl.h"
 #include "hal/dVideoPortAIDLImpl.h"
+#include <com/rdk/hal/hdmioutput/IHDMIOutputManager.h>
 
 VideoPort VideoPort::Create(INotification& parent)
 {
     ENTRY_LOG;
-    if (HalFactoryUtility::isAidlServiceAvailable(android::String16(IHdmiOutput::serviceName().c_str()))) {
+    if (HalFactoryUtility::isAidlServiceAvailable(android::String16(com::rdk::hal::hdmioutput::IHDMIOutputManager::serviceName().c_str()))) {
         DSLOG_INFO("Using HDMI Output AIDL HAL");
         return VideoPort(parent, std::make_shared<dVideoPortAIDLImpl>());
     }
