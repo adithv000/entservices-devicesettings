@@ -18,6 +18,7 @@
  */
 #include "dVideoPortAIDLImpl.h"
 #include "DeviceSettingsTypes.h"
+#include "DeviceSettingsHdmiStatus.h"
 
 #include <binder/IServiceManager.h>
 #include <binder/ProcessState.h>
@@ -86,6 +87,32 @@ int32_t ExtractIntProperty(const std::optional<PropertyValue>& value, int32_t de
         return defaultValue;
     }
     return value->value->get<PropertyValue::Value::intValue>();
+}
+
+ResolutionChange ToResolutionChange(const VideoResolution pixelResolution)
+{
+    ResolutionChange change;
+    switch (pixelResolution) {
+    case VideoResolution::DS_VIDEO_PIXELRES_720X480:   change.width = 720;  change.height = 480;  break;
+    case VideoResolution::DS_VIDEO_PIXELRES_720X576:   change.width = 720;  change.height = 576;  break;
+    case VideoResolution::DS_VIDEO_PIXELRES_1280X720:  change.width = 1280; change.height = 720;  break;
+    case VideoResolution::DS_VIDEO_PIXELRES_1920X1080: change.width = 1920; change.height = 1080; break;
+    case VideoResolution::DS_VIDEO_PIXELRES_3840X2160: change.width = 3840; change.height = 2160; break;
+    default:                                           change.width = 1920; change.height = 1080; break;
+    }
+    return change;
+}
+
+dsHdcpStatus_t ToDsHdcpStatus(const VideoPortHdcpStatus status)
+{
+    switch (status) {
+    case VideoPortHdcpStatus::DS_HDCP_STATUS_UNAUTHENTICATED:       return dsHDCP_STATUS_UNAUTHENTICATED;
+    case VideoPortHdcpStatus::DS_HDCP_STATUS_AUTHENTICATED:         return dsHDCP_STATUS_AUTHENTICATED;
+    case VideoPortHdcpStatus::DS_HDCP_STATUS_AUTHENTICATIONFAILURE: return dsHDCP_STATUS_AUTHENTICATIONFAILURE;
+    case VideoPortHdcpStatus::DS_HDCP_STATUS_INPROGRESS:            return dsHDCP_STATUS_INPROGRESS;
+    case VideoPortHdcpStatus::DS_HDCP_STATUS_PORTDISABLED:          return dsHDCP_STATUS_PORTDISABLED;
+    default:                                                        return dsHDCP_STATUS_UNPOWERED;
+    }
 }
 }
 
@@ -169,12 +196,6 @@ bool dVideoPortAIDLImpl::OpenDevice(const Output::Id& id, Device& device)
     }
 
     device.controllerListener = new ControllerListener(*this, id.value);
-    device.eventListener = new EventListener(*this, id.value);
-    bool registered = false;
-    if (!device.output->registerEventListener(device.eventListener, &registered).isOk() || !registered) {
-        DSLOG_ERR("registerEventListener failed on HDMI output id=%d", id.value);
-    }
-
     if (!device.output->open(device.controllerListener, &device.controller).isOk() || device.controller == nullptr) {
         DSLOG_ERR("open() failed on HDMI output id=%d", id.value);
         CloseDevice(device);
@@ -185,18 +206,32 @@ bool dVideoPortAIDLImpl::OpenDevice(const Output::Id& id, Device& device)
         CloseDevice(device);
         return false;
     }
+
+    device.eventListener = new EventListener(*this, id.value);
+    bool registered = false;
+    if (!device.output->registerEventListener(device.eventListener, &registered).isOk() || !registered) {
+        DSLOG_ERR("registerEventListener failed on HDMI output id=%d", id.value);
+    }
     return true;
 }
 
 void dVideoPortAIDLImpl::CloseDevice(Device& device)
 {
-    if (device.controller != nullptr) {
-        device.controller->stop();
-    }
     if (device.output != nullptr) {
+        // stop() needs STARTED and close() needs READY; other states raise EX_ILLEGAL_STATE.
+        HdmiOutput::State state = HdmiOutput::State::STARTED;
+        if (!device.output->getState(&state).isOk()) {
+            state = HdmiOutput::State::STARTED;
+        }
         if (device.controller != nullptr) {
-            bool closed = false;
-            device.output->close(device.controller, &closed);
+            if (state == HdmiOutput::State::STARTED) {
+                device.controller->stop();
+                state = HdmiOutput::State::READY;
+            }
+            if (state == HdmiOutput::State::READY) {
+                bool closed = false;
+                device.output->close(device.controller, &closed);
+            }
         }
         if (device.eventListener != nullptr) {
             bool unregistered = false;
@@ -256,7 +291,18 @@ void dVideoPortAIDLImpl::InitialiseHAL()
         _manager.clear();
         return;
     }
+    DSLOG_INFO("%zu of %zu HDMI outputs opened", _devices.size(), ids.size());
     getPersistenceValue();
+
+    // Legacy parity: seed the shared HDMI status cache before any event arrives.
+    _dsSyncHdmiStatus(DS_HDMI_TAG_HDCPSTATUS, dsHDCP_STATUS_UNAUTHENTICATED);
+    _dsSyncHdmiStatus(DS_HDMI_TAG_HDCPVERSION, dsHDCP_VERSION_1X);
+    bool connected = false;
+    if (!_devices.front().controller->getHotPlugDetectState(&connected).isOk()) {
+        DSLOG_ERR("getHotPlugDetectState failed during init");
+    }
+    _dsSyncHdmiStatus(DS_HDMI_TAG_HOTPLUP, connected ? dsDISPLAY_EVENT_CONNECTED : dsDISPLAY_EVENT_DISCONNECTED);
+
     _opened = true;
 }
 
@@ -297,11 +343,15 @@ uint32_t dVideoPortAIDLImpl::GetVideoPort(const VideoPortType videoPort, const i
     if (!_opened || index < 0 || static_cast<size_t>(index) >= _devices.size()) {
         return WPEFramework::Core::ERROR_UNAVAILABLE;
     }
+    DSLOG_INFO(" videoPort=%d, index=%d", static_cast<int>(videoPort), index);
+
     // Only HDMI/INTERNAL outputs are backed by the AIDL HAL.
     if (videoPort != VideoPortType::DS_VIDEO_PORT_TYPE_HDMI && videoPort != VideoPortType::DS_VIDEO_PORT_TYPE_INTERNAL) {
+        DSLOG_ERR(" dsGetVideoPort failed with error: unsupported video port type");
         return WPEFramework::Core::ERROR_UNAVAILABLE;
     }
     handle = _devices[index].id.value;
+    DSLOG_INFO(" SUCCESS - handle=%d", handle);
     return WPEFramework::Core::ERROR_NONE;
 }
 
@@ -315,17 +365,41 @@ uint32_t dVideoPortAIDLImpl::IsVideoPortEnabled(const int32_t handle, bool& enab
     if (!device->output->getState(&state).isOk()) {
         return WPEFramework::Core::ERROR_GENERAL;
     }
-    enabled = (state != HdmiOutput::State::CLOSED);
+    enabled = (state == HdmiOutput::State::STARTED);
     return WPEFramework::Core::ERROR_NONE;
 }
 
 uint32_t dVideoPortAIDLImpl::EnableVideoPort(const int32_t handle, const bool enabled)
 {
-    if (FindDevice(handle) == nullptr) {
+    Device* device = FindDevice(handle);
+    if (device == nullptr) {
         return WPEFramework::Core::ERROR_UNAVAILABLE;
     }
-    // The AIDL HAL keeps the controller started for the lifetime of this object (see open()/start()).
-    return enabled ? WPEFramework::Core::ERROR_NONE : WPEFramework::Core::ERROR_UNAVAILABLE;
+    DSLOG_INFO(" handle=%d, enabled=%s", handle, enabled ? "true" : "false");
+
+    HdmiOutput::State state;
+    if (!device->output->getState(&state).isOk()) {
+        return WPEFramework::Core::ERROR_GENERAL;
+    }
+    // Mapping: dsEnableVideoPort -> IHDMIOutputController.start()/stop(), valid only from READY/STARTED.
+    if (enabled) {
+        if (state == HdmiOutput::State::STARTED) {
+            return WPEFramework::Core::ERROR_NONE;
+        }
+        if (state != HdmiOutput::State::READY || !device->controller->start().isOk()) {
+            DSLOG_ERR("start() failed, state=%d", static_cast<int>(state));
+            return WPEFramework::Core::ERROR_GENERAL;
+        }
+    } else {
+        if (state == HdmiOutput::State::READY) {
+            return WPEFramework::Core::ERROR_NONE;
+        }
+        if (state != HdmiOutput::State::STARTED || !device->controller->stop().isOk()) {
+            DSLOG_ERR("stop() failed, state=%d", static_cast<int>(state));
+            return WPEFramework::Core::ERROR_GENERAL;
+        }
+    }
+    return WPEFramework::Core::ERROR_NONE;
 }
 
 uint32_t dVideoPortAIDLImpl::IsVideoPortDisplayConnected(const int32_t handle, bool& connected)
@@ -426,17 +500,47 @@ uint32_t dVideoPortAIDLImpl::SetVideoPortResolution(const int32_t handle, const 
         return WPEFramework::Core::ERROR_GENERAL;
     }
 
-    PropertyValue value;
-    value.value = PropertyValue::Value::make<PropertyValue::Value::intValue>(static_cast<int32_t>(vic));
-    bool applied = false;
-    if (!device->controller->setProperty(HdmiOutput::Property::VIC, value, &applied).isOk() || !applied) {
-        return WPEFramework::Core::ERROR_GENERAL;
+    // Skip the HAL (and the AVMUTE it causes) when the requested VIC is already active.
+    bool alreadyActive = false;
+    std::optional<PropertyValue> currentValue;
+    if (device->output->getProperty(HdmiOutput::Property::VIC, &currentValue).isOk()) {
+        alreadyActive = (ExtractIntProperty(currentValue, -1) == static_cast<int32_t>(vic));
+    }
+
+    std::function<void(const ResolutionChange)> preChange;
+    std::function<void(const ResolutionChange)> postChange;
+    {
+        std::lock_guard<std::mutex> lock(_adminLock);
+        preChange = _callbacks.OnResolutionPreChange;
+        postChange = _callbacks.OnResolutionPostChange;
+    }
+    const ResolutionChange change = ToResolutionChange(resolution.pixelResolution);
+
+    if (!alreadyActive) {
+        if (preChange) {
+            preChange(change);
+        }
+        PropertyValue value;
+        value.value = PropertyValue::Value::make<PropertyValue::Value::intValue>(static_cast<int32_t>(vic));
+        bool applied = false;
+        if (!device->controller->setProperty(HdmiOutput::Property::VIC, value, &applied).isOk() || !applied) {
+            DSLOG_ERR("setProperty(VIC) failed for '%s'", resolution.name.c_str());
+            return WPEFramework::Core::ERROR_GENERAL;
+        }
+        if (postChange) {
+            postChange(change);
+        }
+    } else {
+        DSLOG_INFO("Same resolution requested, skipping setProperty(VIC)");
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(_adminLock);
+        _persistedResolution = resolution.name;
     }
     if (persist) {
         try {
             device::HostPersistence::getInstance().persistHostProperty("HDMI0.resolution", resolution.name);
-            std::lock_guard<std::mutex> lock(_adminLock);
-            _persistedResolution = resolution.name;
         } catch (...) {
             DSLOG_ERR("Failed to persist HDMI resolution");
         }
@@ -519,10 +623,8 @@ uint32_t dVideoPortAIDLImpl::GetVideoPortFrameRate(const int32_t handle, uint32_
 
 uint32_t dVideoPortAIDLImpl::SetVideoPortFrameRate(const int32_t handle, const uint32_t frameRate)
 {
-    (void)handle;
-    (void)frameRate;
-    DSLOG_WARN("frame rate is implicit in the VIC/resolution; use SetVideoPortResolution");
-    return WPEFramework::Core::ERROR_UNAVAILABLE;
+    DSLOG_WARN(" not a separate HAL operation — frame rate is implicit in SetVideoPortResolution");
+    return WPEFramework::Core::ERROR_NONE;
 }
 
 VideoPortHdcpStatus dVideoPortAIDLImpl::ConvertHdcpStatus(HdmiOutput::HDCPStatus status)
@@ -908,7 +1010,8 @@ uint32_t dVideoPortAIDLImpl::SetPreferredColorDepth(const int32_t handle, const 
 void dVideoPortAIDLImpl::OnHotPlugDetectStateChanged(const int32_t handle, bool connected)
 {
     DSLOG_INFO("outputId=%d, connected=%s", handle, connected ? "true" : "false");
-    // No hotplug slot exists in hal::dVideoPort::CallbackBundle; the Display plugin owns hotplug reporting.
+    // No hotplug slot exists in hal::dVideoPort::CallbackBundle; only the shared status cache is updated.
+    _dsSyncHdmiStatus(DS_HDMI_TAG_HOTPLUP, connected ? dsDISPLAY_EVENT_CONNECTED : dsDISPLAY_EVENT_DISCONNECTED);
 }
 
 void dVideoPortAIDLImpl::OnFrameRateChanged(const int32_t handle)
@@ -918,24 +1021,20 @@ void dVideoPortAIDLImpl::OnFrameRateChanged(const int32_t handle)
         return;
     }
     if (_callbacks.OnResolutionPostChange) {
-        ResolutionChange change;
-        switch (resolution.pixelResolution) {
-        case VideoResolution::DS_VIDEO_PIXELRES_720X480:   change.width = 720;  change.height = 480;  break;
-        case VideoResolution::DS_VIDEO_PIXELRES_720X576:   change.width = 720;  change.height = 576;  break;
-        case VideoResolution::DS_VIDEO_PIXELRES_1280X720:  change.width = 1280; change.height = 720;  break;
-        case VideoResolution::DS_VIDEO_PIXELRES_1920X1080: change.width = 1920; change.height = 1080; break;
-        case VideoResolution::DS_VIDEO_PIXELRES_3840X2160: change.width = 3840; change.height = 2160; break;
-        default:                                           change.width = 1920; change.height = 1080; break;
-        }
-        _callbacks.OnResolutionPostChange(change);
+        _callbacks.OnResolutionPostChange(ToResolutionChange(resolution.pixelResolution));
     }
 }
 
-void dVideoPortAIDLImpl::OnHDCPStatusChanged(const int32_t handle, HdmiOutput::HDCPStatus status, HdmiOutput::HDCPProtocolVersion /*version*/)
+void dVideoPortAIDLImpl::OnHDCPStatusChanged(const int32_t handle, HdmiOutput::HDCPStatus status, HdmiOutput::HDCPProtocolVersion version)
 {
     DSLOG_INFO("outputId=%d, hdcpStatus=%d", handle, static_cast<int>(status));
+    const VideoPortHdcpStatus converted = ConvertHdcpStatus(status);
+    _dsSyncHdmiStatus(DS_HDMI_TAG_HDCPSTATUS, ToDsHdcpStatus(converted));
+    const bool authenticated = (converted == VideoPortHdcpStatus::DS_HDCP_STATUS_AUTHENTICATED);
+    _dsSyncHdmiStatus(DS_HDMI_TAG_HDCPVERSION,
+        (authenticated && version == HdmiOutput::HDCPProtocolVersion::VERSION_2_X) ? dsHDCP_VERSION_2X : dsHDCP_VERSION_1X);
     if (_callbacks.OnHDCPStatusChange) {
-        _callbacks.OnHDCPStatusChange(ConvertHdcpStatus(status));
+        _callbacks.OnHDCPStatusChange(converted);
     }
 }
 

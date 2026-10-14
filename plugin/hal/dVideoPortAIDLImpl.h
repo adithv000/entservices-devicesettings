@@ -129,7 +129,7 @@ private:
     CallbackBundle _callbacks;
     android::sp<Manager> _manager;
     std::vector<Device> _devices;
-    bool _opened;
+    std::atomic<bool> _opened;
     // Shared by all outputs, as the persistence keys are not per output.
     std::string _persistedResolution;
     std::atomic<bool> _force4KDisabled { false };
