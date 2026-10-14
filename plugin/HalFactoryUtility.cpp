@@ -26,6 +26,7 @@
 
 #include <linux/android/binder.h>
 #include <binder/IServiceManager.h>
+#include <utils/String8.h>
 
 #include "Module.h"
 #include <core/Portability.h>
@@ -36,19 +37,10 @@
 
 static const android::String16 mServiceManagerName("manager");
 
-namespace {
-class HalFactoryUtility {
-    public:
-        enum class BackendType {
-            UNKNOWN,
-            LEGACY,
-            AIDL
-        };
+std::unordered_map<std::string, HalFactoryUtility::BackendType> HalFactoryUtility::mBackendType;
 
-        static std::unordered_map<std::string, BackendType> mBackendType;
-
-        static bool isAidlServiceAvailable(const android::String16 &expectedServiceName)
-        {
+bool HalFactoryUtility::isAidlServiceAvailable(const android::String16 &expectedServiceName)
+{
             LOGINFO("isAidlServiceAvailable invoked\r\n");
 
             const std::string expectedServiceNameString = android::String8(expectedServiceName).string();
@@ -131,7 +123,4 @@ class HalFactoryUtility {
                 android::String8(expectedServiceName).string());
             backendTypeIt->second = BackendType::LEGACY;
             return false;
-        }
-    };
-    std::unordered_map<std::string, HalFactoryUtility::BackendType> HalFactoryUtility::mBackendType;
 }

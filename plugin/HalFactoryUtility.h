@@ -19,9 +19,21 @@
 
 #pragma once
 
-#include <memory>
+#include <string>
+#include <unordered_map>
+
+#include <utils/String16.h>
 
 class HalFactoryUtility {
 public:
-    static bool isAidlServiceAvailable(const android::String16 &expectedServiceName)
+    static bool isAidlServiceAvailable(const android::String16 &expectedServiceName);
+
+private:
+    enum class BackendType {
+        UNKNOWN,
+        LEGACY,
+        AIDL
+    };
+
+    static std::unordered_map<std::string, BackendType> mBackendType;
 };
